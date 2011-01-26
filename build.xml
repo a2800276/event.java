@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+
+<project name="event" default="compile" basedir=".">
+
+<echo message="pulling in property files"/>
+<property file="build.properties"/>
+<property name="classes.dir" value="classes"/>
+<property name="ext.dir" value="../ext"/>
+
+
+<target name="prepare">
+	<mkdir dir="${classes.dir}"/>
+	<mkdir dir="lib"/>
+</target>
+
+<target name="clean">
+	<delete dir="${classes.dir}"/>
+	<delete dir="lib"/>
+</target>
+
+<target name="compile" depends="prepare">
+	<javac srcdir="src" destdir="${classes.dir}" debug="on">
+    <classpath>
+      <pathelement path="${classpath}"/>
+      <pathelement path="${ext.dir}/junit.jar"/>
+    </classpath>
+  </javac>
+</target>
+<!--
+<target name="test" depends="compile">
+  <junit printsummary="yes">
+    <classpath>
+      <pathelement path="${classes.dir}"/>
+      <pathelement path="${ext.dir}/junit.jar"/>
+    </classpath> 
+    <test name="base64.Base64Test"/>
+  </junit>
+</target>
+-->
+<target name="doc">
+  <javadoc sourcepath="src/" destdir="doc">  
+    <classpath>
+      <pathelement path="${ext.dir}/junit.jar"/>
+    </classpath> 
+	</javadoc>
+</target>
+
+
+<!-- <target name="jar" depends="test"> -->
+<target name="jar" depends="compile">
+	<jar basedir="${classes.dir}" destfile="lib/${ant.project.name}.jar"/>
+</target>
+
+<target name="run" depends="jar">
+	<echo message="don't know how to run"/>
+</target>
+
+</project>
