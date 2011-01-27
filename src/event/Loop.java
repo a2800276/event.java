@@ -8,6 +8,9 @@ public abstract class Loop extends Thread {
   protected long maxSleep = 0;
   private boolean stopped;
 
+  protected Thread loopThread; // this is the thread running the main loop
+                        // used to determine that we're not being run in another thread
+
   protected Callback.ErrorCallback errCB;
 
 
@@ -28,6 +31,7 @@ public abstract class Loop extends Thread {
 
   public void run () {
     int numSelected = 0;
+    this.loopThread = Thread.currentThread();
     while (!stopped) {
       try {
         numSelected = this.selector.select(this.maxSleep);

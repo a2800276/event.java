@@ -1,6 +1,7 @@
 package event;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.nio.channels.SelectionKey;
 
 public interface Callback {
   
@@ -17,15 +18,19 @@ public interface Callback {
     }
   }
 
-  static abstract class TCPClientCB implements Callback {
-    public abstract void onConnect  (Loop l, SocketChannel c);
-	  public abstract void onData     (Loop l, SocketChannel c, ByteBuffer buf);
-	  public abstract void write      (Loop l, ByteBuffer b);
-	  public abstract void onClose    (Loop l, SocketChannel c);
+  static abstract class TCPClientCB implements ErrorCallback {
+    public abstract void onConnect  (TCPClientLoop l, SocketChannel c);
+	  public abstract void onData     (TCPClientLoop l, SocketChannel c, ByteBuffer buf);
+	  public abstract void onClose    (TCPClientLoop l, SocketChannel c);
+
+	  //public void write (TCPClientLoop l, SocketChannel c, ByteBuffer buf) {
+    //  l.queueOp(c, SelectionKey.OP_WRITE, this, buf);
+    //};
+
     public void onError (Loop l, Throwable t) {
       l.onError(t);
     }
-    public void onError    (Loop l, SocketChannel c, Throwable t){
+    public void onError (TCPClientLoop l, SocketChannel c, Throwable t){
       this.onError(l, t);
     };
 
