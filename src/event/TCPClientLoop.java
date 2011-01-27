@@ -23,15 +23,17 @@ public class TCPClientLoop extends TimeoutLoop {
   }
 
   public void createTCPClient (Callback.TCPClientCB cb, String host, int port) {
-    // TODO ... create a non Q create callable from the eventloop thread ...
     try {
       SocketChannel sc = SocketChannel.open();
       // todo async dns
       SocketAddress remote = new InetSocketAddress(InetAddress.getByName(host), port);
 
       sc.configureBlocking(false);
-      
-      queueConnect(sc, cb);
+      if (this.isLoopThread()) {
+        sc.register(this.selector, SelectionKey.OP_CONNECT, new R(sc, cb));
+      } else { 
+        queueConnect(sc, cb);
+      }
       sc.connect(remote);	
     } catch (Throwable t) {
       cb.onError(this, t);
@@ -39,7 +41,7 @@ public class TCPClientLoop extends TimeoutLoop {
   }
 
   public void write (SocketChannel sc, Callback.TCPClientCB cb, ByteBuffer buffer) {
-    if (!Thread.currentThread().equals(this.loopThread)) {
+    if (!this.isLoopThread()) {
       // raise hell, completely shut down, ur doing it wrong.
     }
     // check in proper thread.
@@ -80,6 +82,7 @@ public class TCPClientLoop extends TimeoutLoop {
   private final ByteBuffer buf = ByteBuffer.allocateDirect(65535);
 
   private void handleRead (SelectionKey key) {
+    assert this.isLoopThread();
     SocketChannel        sc = (SocketChannel)key.channel();
     Callback.TCPClientCB cb = ((R)key.attachment()).cb;
 
