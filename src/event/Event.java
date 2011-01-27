@@ -14,7 +14,7 @@ public interface Event {
     public long getTimeout() {
       return this.timeout;
     }
-    public abstract void go();
+    public abstract void go(TimeoutLoop l);
   }
 
 

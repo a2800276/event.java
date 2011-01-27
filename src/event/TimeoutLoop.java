@@ -31,6 +31,7 @@ public class TimeoutLoop extends Loop {
     }
     synchronized(this.newTimeouts){
       this.timeouts.addAll(this.newTimeouts);
+      this.newTimeouts.clear();
       this.hasNewTO = false;
     }
   }
@@ -46,7 +47,7 @@ public class TimeoutLoop extends Loop {
     do {
       timeout = this.timeouts.first();
       if (time >= timeout.time) {
-        timeout.ev.go();
+        timeout.ev.go(this);
         this.timeouts.remove(timeout);
         ++count;
         if (timeout.interval) { // return to queue
@@ -74,11 +75,17 @@ public class TimeoutLoop extends Loop {
 
   private void addTimeout(final Event.Timeout ev, boolean interval) {
     long timesOutOn = System.currentTimeMillis() + ev.getTimeout();
-    synchronized (this.newTimeouts) {
-      this.newTimeouts.add (new T(timesOutOn, ev, interval));
-      this.hasNewTO = true;
+    T t = new T(timesOutOn, ev, interval);
+    
+    if (this.isLoopThread()) {
+      this.timeouts.add(t);
+    } else {
+      synchronized (this.newTimeouts) {
+        this.newTimeouts.add (t);
+        this.hasNewTO = true;
+      }
+      this.wake();
     }
-    this.wake();
   }
 
   private static long min (long one, long two) {
@@ -91,26 +98,32 @@ public class TimeoutLoop extends Loop {
   public static void main(String [] args) throws Throwable {
     TimeoutLoop loop = new TimeoutLoop();
     //p(loop);
-    loop.start();
     
+    loop.start();
     loop.addTimeout(new Event.Timeout(750) {
-      public void go () { p("timeout");}
+      public void go (Loop l) { p("timeout");}
     });
 
     loop.addTimeout(new Event.Timeout(0) {
-      public void go () { p("timeout-1");}
+      public void go (Loop l) { p("timeout-1");}
     });
 
     loop.addTimeout(new Event.Timeout(850) {
-      public void go () { p("timeout2");}
+      public void go (Loop l) { p("timeout2");}
     });
 
     loop.addTimeout(new Event.Timeout(150) {
-      public void go () { p("timeout0");}
+      int i;
+      public void go (Loop l) { 
+        p("timeout0");
+        i++;
+        if (i>3) return;
+        ((TimeoutLoop)l).addTimeout(this);
+      }
     });
 
     loop.addInterval(new Event.Timeout(100) {
-      public void go () { p("interval");}
+      public void go (Loop l) { p("interval");}
     });
     
     Thread.sleep(1000);

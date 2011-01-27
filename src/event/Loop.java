@@ -9,7 +9,7 @@ public abstract class Loop extends Thread {
   volatile boolean stopped;
 
   protected Thread loopThread; // this is the thread running the main loop
-                        // used to determine that we're not being run in another thread
+                               // used to determine that we're not being run in another thread
 
   protected Callback.ErrorCallback errCB;
 
@@ -30,8 +30,8 @@ public abstract class Loop extends Thread {
   }
 
   public void run () {
-    int numSelected = 0;
     this.loopThread = Thread.currentThread();
+    int numSelected = 0;
     while (!stopped) {
       try {
         numSelected = this.selector.select(this.maxSleep);
@@ -40,6 +40,13 @@ public abstract class Loop extends Thread {
         onError(t);
       } 
     } 
+  }
+
+  public boolean isLoopThread() {
+    if (this.loopThread != null && Thread.currentThread().equals(this.loopThread)) {
+      return true;
+    }
+    return false;
   }
 
   protected abstract void go () throws Throwable;
