@@ -15,6 +15,8 @@ public class TCPClientLoop extends TimeoutLoop {
   
   Queue<R> registerOpsQueue;
 
+  volatile boolean newClients;
+
   public TCPClientLoop () {
     super();
     registerOpsQueue = new LinkedList<R>();
@@ -140,6 +142,9 @@ public class TCPClientLoop extends TimeoutLoop {
   }
 
   private void registerConnect() {
+    if (!newClients) {
+      return;
+    }
     R r = null;
     synchronized (this.registerOpsQueue) {
 
@@ -155,13 +160,15 @@ public class TCPClientLoop extends TimeoutLoop {
           r.cb.onError(this, r.channel, cce);
         }
       }
+      this.newClients = false;
     }
   }
 
-  public void queueConnect (SocketChannel sc, Callback.TCPClientCB cb) {
+  private void queueConnect (SocketChannel sc, Callback.TCPClientCB cb) {
     R r = new R(sc, cb);
     synchronized (this.registerOpsQueue) {
       this.registerOpsQueue.add(r);
+      this.newClients = true;
     }
     this.wake();
   }
