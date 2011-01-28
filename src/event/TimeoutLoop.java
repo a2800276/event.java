@@ -101,20 +101,20 @@ public class TimeoutLoop extends Loop {
     
     loop.start();
     loop.addTimeout(new Event.Timeout(750) {
-      public void go (Loop l) { p("timeout");}
+      public void go (TimeoutLoop l) { p("timeout");}
     });
 
     loop.addTimeout(new Event.Timeout(0) {
-      public void go (Loop l) { p("timeout-1");}
+      public void go (TimeoutLoop l) { p("timeout-1");}
     });
 
     loop.addTimeout(new Event.Timeout(850) {
-      public void go (Loop l) { p("timeout2");}
+      public void go (TimeoutLoop l) { p("timeout2");}
     });
 
     loop.addTimeout(new Event.Timeout(150) {
       int i;
-      public void go (Loop l) { 
+      public void go (TimeoutLoop l) { 
         p("timeout0");
         i++;
         if (i>3) return;
@@ -123,7 +123,7 @@ public class TimeoutLoop extends Loop {
     });
 
     loop.addInterval(new Event.Timeout(100) {
-      public void go (Loop l) { p("interval");}
+      public void go (TimeoutLoop l) { p("interval");}
     });
     
     Thread.sleep(1000);

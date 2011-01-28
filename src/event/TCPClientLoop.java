@@ -40,9 +40,14 @@ public class TCPClientLoop extends TimeoutLoop {
     }
   }
 
-  public void write (SocketChannel sc, Callback.TCPClientCB cb, ByteBuffer buffer) {
+  public void write (final SocketChannel sc, final Callback.TCPClientCB cb, final ByteBuffer buffer) {
     if (!this.isLoopThread()) {
-      // raise hell, completely shut down, ur doing it wrong.
+      this.addTimeout(new Event.Timeout(0){
+        public void go(TimeoutLoop loop) {
+          ((TCPClientLoop)loop).write(sc, cb, buffer);
+        }
+      });
+      return;
     }
     // check in proper thread.
     SelectionKey key = sc.keyFor(this.selector);
@@ -82,7 +87,9 @@ public class TCPClientLoop extends TimeoutLoop {
   private final ByteBuffer buf = ByteBuffer.allocateDirect(65535);
 
   private void handleRead (SelectionKey key) {
+
     assert this.isLoopThread();
+    
     SocketChannel        sc = (SocketChannel)key.channel();
     Callback.TCPClientCB cb = ((R)key.attachment()).cb;
 
@@ -104,6 +111,9 @@ public class TCPClientLoop extends TimeoutLoop {
   }
 
   private void handleWrite(SelectionKey key) {
+
+    assert this.isLoopThread();
+    
     SocketChannel sc = (SocketChannel)key.channel();
     R             r  = (R)key.attachment();
 
@@ -131,20 +141,26 @@ public class TCPClientLoop extends TimeoutLoop {
   }
   
   private void handleConnect(SelectionKey key) {
-        SocketChannel        sc = (SocketChannel)key.channel();
-        Callback.TCPClientCB cb = ((R)key.attachment()).cb;
-        try {
-          sc.finishConnect();
-        } catch (java.io.IOException ioe) {
-          cb.onError(this, sc, ioe);
-        }
-        cb.onConnect(this, sc); 
 
-        
-        key.interestOps(key.interestOps() | SelectionKey.OP_READ);
+    assert this.isLoopThread();
+
+    SocketChannel        sc = (SocketChannel)key.channel();
+    Callback.TCPClientCB cb = ((R)key.attachment()).cb;
+    try {
+      sc.finishConnect();
+    } catch (java.io.IOException ioe) {
+      cb.onError(this, sc, ioe);
+    }
+    cb.onConnect(this, sc); 
+
+
+    key.interestOps(key.interestOps() | SelectionKey.OP_READ);
   }
 
   private void registerConnect() {
+
+    assert this.isLoopThread();
+
     if (!newClients) {
       return;
     }
@@ -168,6 +184,9 @@ public class TCPClientLoop extends TimeoutLoop {
   }
 
   private void queueConnect (SocketChannel sc, Callback.TCPClientCB cb) {
+
+    assert !this.isLoopThread();
+
     R r = new R(sc, cb);
     synchronized (this.registerOpsQueue) {
       this.registerOpsQueue.add(r);
@@ -177,6 +196,7 @@ public class TCPClientLoop extends TimeoutLoop {
   }
 
   public void shutdownOutput (SocketChannel sc, Callback.TCPClientCB cb) {
+    // TODO cancel all write operations, or check.
     try {
       sc.socket().shutdownOutput(); 
     } catch (java.io.IOException ioe) {
