@@ -13,18 +13,20 @@ import java.net.SocketAddress;
 
 public class TCPClientLoop extends TimeoutLoop {
   
-  Queue<R> registerOpsQueue;
-
-  volatile boolean newClients;
 
   public TCPClientLoop () {
     super();
-    registerOpsQueue = new LinkedList<R>();
   }
-
-  public void createTCPClient (Callback.TCPClientCB cb, String host, int port) {
+  
+  /**
+   * May result in Callback onError being informed of the following Exceptions:
+   *  java.io.IOException
+   *  java.net.UnknownHostException
+   *  java.nio.channels.ClosedChannelException
+   */
+  public SocketChannel createTCPClient (final Callback.TCPClientCB cb, String host, int port) {
     try {
-      SocketChannel sc = SocketChannel.open();
+      final SocketChannel sc = SocketChannel.open();
       // todo async dns
       SocketAddress remote = new InetSocketAddress(InetAddress.getByName(host), port);
 
@@ -32,16 +34,29 @@ public class TCPClientLoop extends TimeoutLoop {
       if (this.isLoopThread()) {
         sc.register(this.selector, SelectionKey.OP_CONNECT, new R(sc, cb));
       } else { 
-        queueConnect(sc, cb);
+        this.addTimeout(new Event.Timeout(0){
+          public void go(TimeoutLoop loop) {
+            TCPClientLoop l = (TCPClientLoop)loop;
+            try {
+              sc.register(l.selector, SelectionKey.OP_CONNECT, new R(sc, cb));
+            } catch (java.nio.channels.ClosedChannelException cce) {
+              cb.onError(l, cce);
+            } 
+          }
+        });
       }
       sc.connect(remote);	
+      return sc;
     } catch (Throwable t) {
       cb.onError(this, t);
     }
+    return null;
+
   }
 
   public void write (final SocketChannel sc, final Callback.TCPClientCB cb, final ByteBuffer buffer) {
     if (!this.isLoopThread()) {
+p("nonloopy");
       this.addTimeout(new Event.Timeout(0){
         public void go(TimeoutLoop loop) {
           ((TCPClientLoop)loop).write(sc, cb, buffer);
@@ -50,9 +65,11 @@ public class TCPClientLoop extends TimeoutLoop {
       return;
     }
     // check in proper thread.
+p("loopy");
+
     SelectionKey key = sc.keyFor(this.selector);
     if (null == key) {
-      cb.onError(this, sc, new RuntimeException("not a previous configured channel!"));
+      cb.onError(this, sc, new RuntimeException("not a previously configured channel!"));
     } else {
       key.interestOps(key.interestOps() | SelectionKey.OP_WRITE); 
       R r_orig = (R)key.attachment();
@@ -65,7 +82,6 @@ public class TCPClientLoop extends TimeoutLoop {
 
     super.go();
     
-    registerConnect();
     
     Iterator<SelectionKey> keys = this.selector.selectedKeys().iterator();
     SelectionKey key;
@@ -99,6 +115,7 @@ public class TCPClientLoop extends TimeoutLoop {
       i = sc.read(buf);
     } catch (java.io.IOException ioe) {
       cb.onError(this, sc, ioe);
+      return;
     }
     if (-1 == i){
       cb.onClose(this, sc);
@@ -125,6 +142,10 @@ public class TCPClientLoop extends TimeoutLoop {
         sc.write(buffer);
       } catch (java.io.IOException ioe) {
         r.cb.onError(this, sc, ioe);
+        //todo: received an error on write, what to do?
+        //  * about unwritten data ...
+        //  * about the channel 
+        return;
       }
       if (buffer.remaining() != 0) {
         // couldn't write the entire buffer, jump
@@ -150,6 +171,7 @@ public class TCPClientLoop extends TimeoutLoop {
       sc.finishConnect();
     } catch (java.io.IOException ioe) {
       cb.onError(this, sc, ioe);
+      return;
     }
     cb.onConnect(this, sc); 
 
@@ -157,43 +179,7 @@ public class TCPClientLoop extends TimeoutLoop {
     key.interestOps(key.interestOps() | SelectionKey.OP_READ);
   }
 
-  private void registerConnect() {
 
-    assert this.isLoopThread();
-
-    if (!newClients) {
-      return;
-    }
-    R r = null;
-    synchronized (this.registerOpsQueue) {
-
-      while ( null != (r = this.registerOpsQueue.poll())) {
-        try {
-          SelectionKey key = r.channel.keyFor(this.selector);
-          if (null == key) {
-            r.channel.register(this.selector, SelectionKey.OP_CONNECT, r);
-          } else {
-            r.cb.onError(this, r.channel, new Exception("already registered"));
-          }
-        } catch (java.nio.channels.ClosedChannelException cce) {
-          r.cb.onError(this, r.channel, cce);
-        }
-      }
-      this.newClients = false;
-    }
-  }
-
-  private void queueConnect (SocketChannel sc, Callback.TCPClientCB cb) {
-
-    assert !this.isLoopThread();
-
-    R r = new R(sc, cb);
-    synchronized (this.registerOpsQueue) {
-      this.registerOpsQueue.add(r);
-      this.newClients = true;
-    }
-    this.wake();
-  }
 
   public void shutdownOutput (SocketChannel sc, Callback.TCPClientCB cb) {
     // TODO cancel all write operations, or check.

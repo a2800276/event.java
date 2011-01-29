@@ -37,7 +37,8 @@ public class TimeoutLoop extends Loop {
   }
 
   private int handleTimeouts () { 
-    long time = System.currentTimeMillis();
+    //long time = System.currentTimeMillis();
+    long time = System.nanoTime();
     int count = 0;
     T timeout = null;
 
@@ -51,7 +52,7 @@ public class TimeoutLoop extends Loop {
         this.timeouts.remove(timeout);
         ++count;
         if (timeout.interval) { // return to queue
-          timeout.time = time + timeout.ev.getTimeout();
+          timeout.time = time + (timeout.ev.getTimeout()*1000000);
           this.timeouts.add(timeout);
         }
         timeout = null;
@@ -60,7 +61,12 @@ public class TimeoutLoop extends Loop {
       }
     } while (0 != this.timeouts.size());
   
-    this.maxSleep = null == timeout ? 0 : timeout.time - time;
+    this.maxSleep = null == timeout ? 0 : max(1000000, timeout.time - time);
+    this.maxSleep /= 1000000;
+//          p("t-t:"+(timeout.time - time));
+//          p("tosize:"+this.timeouts.size());
+//          p("to:"+timeout);
+//    p("set:"+this.maxSleep);
     return count;
   } 
   // create mechanism to introduce new TO's and Intervals to the
@@ -74,7 +80,8 @@ public class TimeoutLoop extends Loop {
 
 
   private void addTimeout(final Event.Timeout ev, boolean interval) {
-    long timesOutOn = System.currentTimeMillis() + ev.getTimeout();
+    //long timesOutOn = System.currentTimeMillis() + ev.getTimeout();
+    long timesOutOn = System.nanoTime() + (ev.getTimeout()*1000000);
     T t = new T(timesOutOn, ev, interval);
     
     if (this.isLoopThread()) {
@@ -94,6 +101,13 @@ public class TimeoutLoop extends Loop {
     }
     return two;
   }
+  private static long max (long one, long two) {
+    if (one > two) {
+      return one;
+    }
+    return two;
+  }
+
 
   public static void main(String [] args) throws Throwable {
     TimeoutLoop loop = new TimeoutLoop();

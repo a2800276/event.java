@@ -34,6 +34,7 @@ public abstract class Loop extends Thread {
     int numSelected = 0;
     while (!stopped) {
       try {
+        // p("sel:"+this.maxSleep);
         numSelected = this.selector.select(this.maxSleep);
         go();
       } catch (Throwable t) {
