@@ -56,7 +56,6 @@ public class TCPClientLoop extends TimeoutLoop {
 
   public void write (final SocketChannel sc, final Callback.TCPClientCB cb, final ByteBuffer buffer) {
     if (!this.isLoopThread()) {
-p("nonloopy");
       this.addTimeout(new Event.Timeout(0){
         public void go(TimeoutLoop loop) {
           ((TCPClientLoop)loop).write(sc, cb, buffer);
@@ -65,7 +64,6 @@ p("nonloopy");
       return;
     }
     // check in proper thread.
-p("loopy");
 
     SelectionKey key = sc.keyFor(this.selector);
     if (null == key) {
