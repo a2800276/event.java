@@ -7,6 +7,7 @@ package event;
 public interface Event {
   public abstract class Timeout implements Event {
     long timeout;
+    public Timeout() {}
     public Timeout(long ms) {
       this.timeout = ms;
     }

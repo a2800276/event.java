@@ -118,7 +118,7 @@ public class TimeoutLoop extends Loop {
       public void go (TimeoutLoop l) { p("timeout");}
     });
 
-    loop.addTimeout(new Event.Timeout(0) {
+    loop.addTimeout(new Event.Timeout() {
       public void go (TimeoutLoop l) { p("timeout-1");}
     });
 

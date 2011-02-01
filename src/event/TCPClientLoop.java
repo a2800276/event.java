@@ -34,7 +34,7 @@ public class TCPClientLoop extends TimeoutLoop {
       if (this.isLoopThread()) {
         sc.register(this.selector, SelectionKey.OP_CONNECT, new R(sc, cb));
       } else { 
-        this.addTimeout(new Event.Timeout(0){
+        this.addTimeout(new Event.Timeout(){
           public void go(TimeoutLoop loop) {
             TCPClientLoop l = (TCPClientLoop)loop;
             try {
@@ -56,7 +56,7 @@ public class TCPClientLoop extends TimeoutLoop {
 
   public void write (final SocketChannel sc, final Callback.TCPClientCB cb, final ByteBuffer buffer) {
     if (!this.isLoopThread()) {
-      this.addTimeout(new Event.Timeout(0){
+      this.addTimeout(new Event.Timeout(){
         public void go(TimeoutLoop loop) {
           ((TCPClientLoop)loop).write(sc, cb, buffer);
         }
