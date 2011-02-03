@@ -13,7 +13,6 @@ import java.net.SocketAddress;
 
 public class TCPClientLoop extends TimeoutLoop {
   
-
   public TCPClientLoop () {
     super();
   }
@@ -69,7 +68,9 @@ public class TCPClientLoop extends TimeoutLoop {
     if (null == key) {
       cb.onError(this, sc, new RuntimeException("not a previously configured channel!"));
     } else {
+    //p(sc.socket().getLocalPort()+">write:"+bin(key.interestOps()));  
       key.interestOps(key.interestOps() | SelectionKey.OP_WRITE); 
+    //p(sc.socket().getLocalPort()+"<write:"+bin(key.interestOps()));  
       R r_orig = (R)key.attachment();
       r_orig.push(buffer);
     }
@@ -117,7 +118,9 @@ public class TCPClientLoop extends TimeoutLoop {
     }
     if (-1 == i){
       cb.onClose(this, sc);
+    //p(sc.socket().getLocalPort()+">handleRead:"+bin(key.interestOps()));  
       key.interestOps(key.interestOps() & ~SelectionKey.OP_READ);
+    //p(sc.socket().getLocalPort()+"<handleRead :"+bin(key.interestOps()));  
       //key.cancel();
     } else {	
       buf.flip();
@@ -155,7 +158,9 @@ public class TCPClientLoop extends TimeoutLoop {
 
     // we've written all the data, no longer interested in writing.
     if (data.isEmpty()) {
+    //p(sc.socket().getLocalPort()+">handleWrite:"+bin(key.interestOps()));  
       key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
+    //p(sc.socket().getLocalPort()+"<handleWrite:"+bin(key.interestOps()));  
     }
   }
   
@@ -174,7 +179,12 @@ public class TCPClientLoop extends TimeoutLoop {
     cb.onConnect(this, sc); 
 
 
-    key.interestOps(key.interestOps() | SelectionKey.OP_READ);
+    //p(sc.socket().getLocalPort()+">handleConnect:"+bin(key.interestOps()));  
+    int io = key.interestOps();
+        io |= SelectionKey.OP_READ;
+        io &= ~SelectionKey.OP_CONNECT;
+    key.interestOps(io);
+    //p(sc.socket().getLocalPort()+"<handleConnect:"+bin(key.interestOps()));  
   }
 
 
@@ -188,6 +198,9 @@ public class TCPClientLoop extends TimeoutLoop {
     }
   }
 
+  static String bin(int num) {
+    return Integer.toBinaryString(num);
+  }
   public static void main (String [] args) {
     TCPClientLoop loop = new TCPClientLoop();
     loop.start();
