@@ -78,10 +78,7 @@ public class TCPClientLoop extends TimeoutLoop {
 
 
   public  void go () {
-
-    super.go();
-    
-    
+    assert this.isLoopThread();
     Iterator<SelectionKey> keys = this.selector.selectedKeys().iterator();
     SelectionKey key;
     while (keys.hasNext()) {
@@ -98,6 +95,7 @@ public class TCPClientLoop extends TimeoutLoop {
       }
     }
 
+    super.go();
   }
   private final ByteBuffer buf = ByteBuffer.allocateDirect(65535);
 

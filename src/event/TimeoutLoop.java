@@ -1,76 +1,94 @@
 package event;
 
-import java.util.TreeSet;
-import java.util.SortedSet;
+import java.util.Queue;
+import java.util.PriorityQueue;
 import java.util.LinkedList;
 import java.util.Comparator;
 
 
 public class TimeoutLoop extends Loop {
 
-  private SortedSet <T> timeouts;
+  private Queue <T> timeouts;
   private LinkedList<T> newTimeouts;
   
-  volatile boolean hasNewTO;
+  /**
+   * reference time for the current iteration of the loop
+   */
+  long loopTime;  
 
 
   public TimeoutLoop () {
     super();
-    this.timeouts    = new TreeSet<T>();
+    this.timeouts    = new PriorityQueue<T>();
     this.newTimeouts = new LinkedList<T>();
   }
 
   protected void go () {
-    handleNewTimeouts();
+    assert this.isLoopThread();
+
+    this.loopTime = System.nanoTime();
     handleTimeouts();
+    // New timeouts need to handled after current
+    // timeouts because they may have been added to the 
+    // queue by a timeout that ran in the current 
+    // iteration. 
+    handleNewTimeouts();
   }
 
   private void handleNewTimeouts() {
-    if (!this.hasNewTO) {
-      return;
-    }
+    assert this.isLoopThread();
+
     synchronized(this.newTimeouts){
       this.timeouts.addAll(this.newTimeouts);
+      setMaxSleep();
+
       this.newTimeouts.clear();
-      this.hasNewTO = false;
     }
   }
 
+  //
+  // Calculate the maximum time the loop is allowed to sleep for
+  // depending on the next timeout to expire ...
+  // 
+  private void setMaxSleep() {
+    assert this.isLoopThread();
+
+    T timeout = this.timeouts.peek();
+
+    long sleep = (null == timeout ? 0 : max(1000000, timeout.time - this.loopTime));
+         sleep /= 1000000;
+
+    this.maxSleep = sleep;
+  }
+
   private int handleTimeouts () { 
-    //long time = System.currentTimeMillis();
-    long time = System.nanoTime();
-    int count = 0;
-    T timeout = null;
+    assert this.isLoopThread();
 
     if (this.timeouts.size() == 0) {
       return 0;
     }
+
+    int count = 0;
+    T timeout = null;
+
     do {
-      timeout = this.timeouts.first();
-      if (time >= timeout.time) {
+      timeout = this.timeouts.peek();
+      if (this.loopTime >= timeout.time) {
         timeout.ev.go(this);
         this.timeouts.remove(timeout);
         ++count;
-        if (timeout.interval) { // return to queue
-          timeout.time = time + (timeout.ev.getTimeout()*1000000);
+        if (timeout.interval) { // return intervals to queue
+          timeout.time = this.loopTime + (timeout.ev.getTimeout()*1000000);
           this.timeouts.add(timeout);
         }
-        timeout = null;
       } else {
         break;
       }
     } while (0 != this.timeouts.size());
-  
-    this.maxSleep = null == timeout ? 0 : max(1000000, timeout.time - time);
-    this.maxSleep /= 1000000;
-//          p("t-t:"+(timeout.time - time));
-//          p("tosize:"+this.timeouts.size());
-//          p("to:"+timeout);
-//    p("set:"+this.maxSleep);
+
     return count;
   } 
-  // create mechanism to introduce new TO's and Intervals to the
-  // loop to avoid synch unless something is being added ... cf createTCPClient
+ 
   public void addTimeout(final Event.Timeout ev) {
     addTimeout(ev, false);
   }
@@ -80,17 +98,29 @@ public class TimeoutLoop extends Loop {
 
 
   private void addTimeout(final Event.Timeout ev, boolean interval) {
-    //long timesOutOn = System.currentTimeMillis() + ev.getTimeout();
+
     long timesOutOn = System.nanoTime() + (ev.getTimeout()*1000000);
     T t = new T(timesOutOn, ev, interval);
-    
-    if (this.isLoopThread()) {
-      this.timeouts.add(t);
-    } else {
-      synchronized (this.newTimeouts) {
-        this.newTimeouts.add (t);
-        this.hasNewTO = true;
-      }
+
+    synchronized (this.newTimeouts) {
+      // even if we are in the loop thread,
+      // we have to add a new timeout to the
+      // new timeout queue (to be transfered to
+      // the proper timeout queue in the next the
+      // iteration) instead of putting it
+      // directly on the proper timeout queue, because
+      // else the timeout loop `handleTimeouts` would
+      // run indefinitely if an `immediate` timeout
+      // is added from within the loop thread. E.g.:
+      // 
+      // new Event.Timeout() {
+      //  public void go(TimeoutLoop loop) {
+      //    loop.addTimeout(this);
+      //  }
+      // }
+      this.newTimeouts.add (t);
+    }
+    if (!this.isLoopThread()) {
       this.wake();
     }
   }

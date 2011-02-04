@@ -1,6 +1,5 @@
 package event;
 
-
 import java.nio.channels.Selector;
 import java.nio.channels.spi.SelectorProvider;
 
@@ -36,6 +35,7 @@ public abstract class Loop extends Thread {
       try {
         // p("sel:"+this.maxSleep);
         numSelected = this.selector.select(this.maxSleep);
+        this.maxSleep = 0; // reset maxSleep
         go();
       } catch (Throwable t) {
         onError(t);
