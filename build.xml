@@ -26,6 +26,14 @@
     </classpath>
   </javac>
 </target>
+<target name="compile-test" depends="compile">
+	<javac srcdir="test" destdir="${classes.dir}" debug="on">
+    <classpath>
+      <pathelement path="${classpath}"/>
+      <!-- <pathelement path="${ext.dir}/junit.jar"/> -->
+    </classpath>
+  </javac>
+</target>
 <!--
 <target name="test" depends="compile">
   <junit printsummary="yes">
