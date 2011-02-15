@@ -39,7 +39,7 @@ public class TCPClientLoop extends TimeoutLoop {
             try {
               sc.register(l.selector, SelectionKey.OP_CONNECT, new R(sc, cb));
             } catch (java.nio.channels.ClosedChannelException cce) {
-              cb.onError(l, cce);
+              cb.onError((TCPClientLoop)l, sc, cce);
             } 
           }
         });

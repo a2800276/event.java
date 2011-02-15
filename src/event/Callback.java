@@ -1,6 +1,7 @@
 package event;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SelectionKey;
 
 public interface Callback {
@@ -33,6 +34,18 @@ public interface Callback {
     public void onError (TCPClientLoop l, SocketChannel c, Throwable t){
       this.onError(l, t);
     };
-
   }
+  
+  static abstract class TCPServerCB implements ErrorCallback {
+    public abstract void onConnect (TCPServerLoop l, ServerSocketChannel ssc);
+    public abstract void onAccept (TCPServerLoop l, ServerSocketChannel ssc, SocketChannel sc);
+    public abstract void onClose (TCPServerLoop l, ServerSocketChannel ssc);
+    public void onError(Loop l, Throwable t) {
+      l.onError(t);
+    }
+    public void onError(TCPServerLoop l, ServerSocketChannel ssc, Throwable t) {
+      this.onError(l, t);
+    }
+  }
+
 }
