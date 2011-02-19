@@ -59,6 +59,13 @@ public abstract class Loop extends Thread {
         Callback.DEFAULT_ERROR_CB.onError(this, t);
       }
   }
+  protected void onError (String msg) {
+    if (null != this.errCB) {
+      this.errCB.onError(this, msg);
+    } else {
+      Callback.DEFAULT_ERROR_CB.onError(this, msg);
+    }
+  }
   
   /**
    * force the loop to run

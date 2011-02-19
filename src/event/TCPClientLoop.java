@@ -50,9 +50,43 @@ public class TCPClientLoop extends TimeoutLoop {
       cb.onError(this, t);
     }
     return null;
-
   }
+  public void createTCPClient (final Callback.TCPClientCB cb, final SocketChannel sc) {
+    try {
+      if (null == sc) {
+        cb.onError(this, "channel is null");
+        return;
+      }
+      if (!sc.isConnected()) {
+        cb.onError(this, "channel not connected!");
+        return;
+      }
+      if (sc.isBlocking()) {
+        sc.configureBlocking(false);
+        if (sc.isBlocking()) {
+          cb.onError(this, "can't make channel non-blocking");
+          return;
+        } 
+      } 
+      if (this.isLoopThread()) {
+        sc.register(this.selector, SelectionKey.OP_READ, new R(sc, cb));
+      } else {
+        this.addTimeout(new Event.Timeout() {
+          public void go (TimeoutLoop l) {
+            TCPClientLoop loop = (TCPClientLoop) l;
+            try {
+              sc.register(loop.selector, SelectionKey.OP_READ, new R(sc, cb));
+            } catch (java.nio.channels.ClosedChannelException cce) {
+              cb.onError(loop, sc, cce);
+            }
+          }
+        });
+      }
 
+    } catch (Throwable t) {
+      cb.onError(this, t);
+    }
+  }
   public void write (final SocketChannel sc, final Callback.TCPClientCB cb, final ByteBuffer buffer) {
     if (!this.isLoopThread()) {
       this.addTimeout(new Event.Timeout(){
@@ -129,7 +163,6 @@ public class TCPClientLoop extends TimeoutLoop {
   private void handleWrite(SelectionKey key) {
 
     assert this.isLoopThread();
-    
     SocketChannel sc = (SocketChannel)key.channel();
     R             r  = (R)key.attachment();
 
@@ -138,7 +171,8 @@ public class TCPClientLoop extends TimeoutLoop {
     while (null != (buffer = data.peek())){
       
       try {
-        sc.write(buffer);
+        long num = sc.write(buffer);
+        //p("wrote: "+num);
       } catch (java.io.IOException ioe) {
         r.cb.onError(this, sc, ioe);
         //todo: received an error on write, what to do?

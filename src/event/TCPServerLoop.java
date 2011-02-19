@@ -1,8 +1,10 @@
 package event;
 
 import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.nio.channels.SelectionKey;
 import java.net.SocketAddress;
+import java.util.Iterator;
 
 public class TCPServerLoop extends TCPClientLoop {
   public TCPServerLoop() {
@@ -35,6 +37,37 @@ public class TCPServerLoop extends TCPClientLoop {
     } catch (java.io.IOException ioe) {
       cb.onError(this, ioe);
     }
+  }
+
+  public void go () {
+    assert this.isLoopThread();
+    Iterator<SelectionKey> keys = this.selector.selectedKeys().iterator();
+    SelectionKey key;
+    while (keys.hasNext()) {
+      key = keys.next();
+      if (key.isValid() && key.isAcceptable()) {
+        keys.remove();
+        handleAccept(key);
+      }
+    }
+    super.go();
+
+  }
+  public void handleAccept(SelectionKey key) {
+    assert this.isLoopThread();
+    assert key.isAcceptable();
+
+    ServerSocketChannel ssc = (ServerSocketChannel)key.channel();
+    Callback.TCPServerCB cb = (Callback.TCPServerCB)key.attachment();
+    SocketChannel sc = null;
+    try {
+      sc = ssc.accept();
+    } catch (java.io.IOException ioe) {
+      cb.onError(this, ssc, ioe);  
+      return;
+    }
+    cb.onAccept(this, ssc, sc);
+
   }
 
 }
