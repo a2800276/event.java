@@ -87,6 +87,12 @@ public class TCPClientLoop extends TimeoutLoop {
       cb.onError(this, t);
     }
   }
+  /**
+   * Utility, avoid if possible! slowish
+   */
+  public void write (final SocketChannel sc, final Callback.TCPClientCB cb, byte [] bytes) {
+    write(sc, cb, ByteBuffer.wrap(bytes));
+  }
   public void write (final SocketChannel sc, final Callback.TCPClientCB cb, final ByteBuffer buffer) {
     if (!this.isLoopThread()) {
       this.addTimeout(new Event.Timeout(){
