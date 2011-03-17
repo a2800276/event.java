@@ -116,6 +116,19 @@ public class TCPClientLoop extends TimeoutLoop {
     }
   }
 
+  public void close (final SocketChannel sc, final Callback.TCPClientCB client) {
+    // can't close channel immediately, because stuff may still need to be written...
+    // ...but... if the channel is not writable, not everything will be written ...
+    this.addTimeout(new Event.Timeout() {
+      public void go (TimeoutLoop l) {
+        try {
+          sc.close();
+        } catch (Throwable t) {
+          client.onError(TCPClientLoop.this, sc, t);
+        }
+      }
+    });
+  }
 
   public  void go () {
     assert this.isLoopThread();
