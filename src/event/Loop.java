@@ -3,6 +3,19 @@ package event;
 import java.nio.channels.Selector;
 import java.nio.channels.spi.SelectorProvider;
 
+/**
+ * This is the basis for a java (nio) based event loop. It's meant
+ * to be used to perform non-calculation intensive tasks (typically io) from
+ * within a single thread.
+ *
+ * As a consequence, long running or blocking functions should not be executed fomr
+ * within the Loop (because we're within a single thread and long-running tasks
+ * would hold up everything else) and interaction with the loop should only be 
+ * performed from within the loop thread itself (see @isLoopThread()).
+ *
+ * Tasks may be inserted into the loop using Timeouts (see @TimeoutLoop).
+ */
+
 public abstract class Loop extends Thread {
   protected long maxSleep = 0;
   volatile boolean stopped;
@@ -42,7 +55,12 @@ public abstract class Loop extends Thread {
       } 
     } 
   }
-
+  
+  /**
+   * Determine whether the Thread calling this method is the same thread
+   * as the one running the loop. Outside threads should not interact with
+   * the loop.
+   */
   public boolean isLoopThread() {
     if (this.loopThread != null && Thread.currentThread().equals(this.loopThread)) {
       return true;
@@ -68,7 +86,7 @@ public abstract class Loop extends Thread {
   }
   
   /**
-   * force the loop to run
+   * Force the loop to run
    */
   public void wake() {
     this.selector.wakeup();
@@ -78,10 +96,17 @@ public abstract class Loop extends Thread {
    * exit the loop
    */
   public void stopLoop () {
+    // this does not need to be synchronized, 
+    // it will definately stop the loop eventually...
     this.stopped = true;
     this.wake();
   }
-
+  
+  /**
+   *  Provide an error callback in case the loop itself runs
+   *  into a problem. Default behaviour is to panic and call
+   *  `System.exit()`
+   */
   public void setErrCB (Callback.ErrorCallback errCB) {
     this.errCB = errCB;
   }

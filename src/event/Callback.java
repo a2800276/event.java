@@ -4,12 +4,27 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SelectionKey;
 
-public interface Callback {
-  
-  public ErrorCallback DEFAULT_ERROR_CB = new DefaultErrorCallback();
+/**
+ * This interface defines some interaction with the event loop
+ */
 
+public interface Callback {
+  /**
+   *  Default callback to handle loop errors.
+   */
+  public static final ErrorCallback DEFAULT_ERROR_CB = new DefaultErrorCallback();
+  
+  /**
+   *  Interface to define how errors are handled in the Loop.
+   */
   static interface ErrorCallback extends Callback {
+    /**
+     *  Functionality to handle Exceptions.
+     */
     public void onError (Loop l, Throwable t);
+    /**
+     *  Functionality to handle String based errors.
+     */
     public void onError (Loop l, String msg);
   }
 
@@ -24,19 +39,37 @@ public interface Callback {
       System.exit(1);
     }
   }
-
+  
+  /**
+   * Basic implementation of the callbacks that need to be handled
+   * when implementing a TCP client
+   */
   static abstract class TCPClientCB implements ErrorCallback {
-    /* default impl is noop, you may want to override this to do 
-     * initialization */
+    /**
+     * Functionality to be executed with a connection is established on this 
+     * client,  default impl is noop, you may want to override this to do 
+     * initialization 
+     */
     public void onConnect  (TCPClientLoop l, SocketChannel c) {}
+    /**
+     *  Functionality that is to be executed when the data is received
+     *  by this client.
+     */
 	  public abstract void onData     (TCPClientLoop l, SocketChannel c, ByteBuffer buf);
-    /* default impl is noop, you may want to override this to do 
-     * cleanup */
+    /**
+     * Functionality to be executed when the client connection is closed.
+     * default impl is noop, you may want to override this to do 
+     * cleanup 
+     */
 	  public  void onClose    (TCPClientLoop l, SocketChannel c) {}
 
 	  //public void write (TCPClientLoop l, SocketChannel c, ByteBuffer buf) {
     //  l.queueOp(c, SelectionKey.OP_WRITE, this, buf);
     //};
+    
+    // default error handlers hand off handlings errors to the loop,
+    // this may not be what you want, as the loop's default error
+    // handlers shut down the vm.
 
     public void onError (Loop l, Throwable t) {
       l.onError(t);

@@ -6,9 +6,39 @@ import java.util.LinkedList;
 import java.util.Comparator;
 
 
-public class TimeoutLoop extends Loop {
+/**
+ * Minimal Loop implementation does something. This is basically
+ * a simple scheduler that executes tasks (currently not very aptly 
+ * named Event.Timeout) on or after a specified time in the future.
+ *
+ * This may occur once (addTimeout) or as an interval (addInterval)
+ *
+ * Usage:
+ *
+ *   TimeoutLoop l = new TimeoutLoop();
+ *               l.addTimeout ( new Event.Timeout(1000) {
+ *                 public void go() { 
+ *                  // do something. Whatever you define to be
+ *                  // done here will be executed in about 1 second.
+ *                 }
+ *               });
+ *               l.run();
+ *
+ *               l.stopLoop();
+ */
 
+public class TimeoutLoop extends Loop {
+  
+  //
+  // Stores the non expired timeout functions until
+  // they expire and are executed.
+  //
   private Queue <T> timeouts;
+
+  // 
+  // Stores new Timeouts until they can be safely transfered
+  // to the `timouts` queue (see above)
+  //
   private LinkedList<T> newTimeouts;
   
   /**
@@ -28,6 +58,7 @@ public class TimeoutLoop extends Loop {
 
     this.loopTime = System.nanoTime();
     handleTimeouts();
+    
     // New timeouts need to handled after current
     // timeouts because they may have been added to the 
     // queue by a timeout that ran in the current 
@@ -37,7 +68,8 @@ public class TimeoutLoop extends Loop {
 
   private void handleNewTimeouts() {
     assert this.isLoopThread();
-
+    
+    // why synchronized? see @addTimeout, below...
     synchronized(this.newTimeouts){
       this.timeouts.addAll(this.newTimeouts);
       setMaxSleep();
@@ -57,10 +89,17 @@ public class TimeoutLoop extends Loop {
 
     long sleep = (null == timeout ? 0 : max(1000000, timeout.time - this.loopTime));
          sleep /= 1000000;
+    
+    //
+    // sleep of 0 is "until woken"
+    //
 
     this.maxSleep = sleep;
   }
-
+  
+  //
+  // execute all task who's time has come...
+  //
   private int handleTimeouts () { 
     assert this.isLoopThread();
 
@@ -88,10 +127,17 @@ public class TimeoutLoop extends Loop {
 
     return count;
   } 
- 
+  
+  /**
+   * Thread safe method to inject functionality into the loop
+   */
   public void addTimeout(final Event.Timeout ev) {
     addTimeout(ev, false);
   }
+
+  /**
+   * Thread safe method to inject repeating functionality into the loop
+   */
   public void addInterval(final Event.Timeout ev) {
     addTimeout(ev, true);
   }
@@ -121,6 +167,10 @@ public class TimeoutLoop extends Loop {
       this.newTimeouts.add (t);
     }
     if (!this.isLoopThread()) {
+      //
+      // make sure an indefinately sleeping loop is
+      // aware of a new timeout.
+      //
       this.wake();
     }
   }

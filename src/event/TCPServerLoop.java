@@ -39,7 +39,7 @@ public class TCPServerLoop extends TCPClientLoop {
     }
   }
 
-  public void go () {
+  protected void go () {
     assert this.isLoopThread();
     Iterator<SelectionKey> keys = this.selector.selectedKeys().iterator();
     SelectionKey key;
@@ -53,6 +53,7 @@ public class TCPServerLoop extends TCPClientLoop {
     super.go();
 
   }
+
   public void handleAccept(SelectionKey key) {
     assert this.isLoopThread();
     assert key.isAcceptable();

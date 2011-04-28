@@ -26,10 +26,17 @@ public class TCPClientLoop extends TimeoutLoop {
   public SocketChannel createTCPClient (final Callback.TCPClientCB cb, String host, int port) {
     try {
       final SocketChannel sc = SocketChannel.open();
+                          sc.configureBlocking(false);
+      
+      //
       // todo async dns
+      //    either:
+      // by calling `getByName` in a seperate thread and injecting
+      // the result, or by using an async library. (http://www.xbill.org/dnsjava/)
+      //
+
       SocketAddress remote = new InetSocketAddress(InetAddress.getByName(host), port);
 
-      sc.configureBlocking(false);
       if (this.isLoopThread()) {
         sc.register(this.selector, SelectionKey.OP_CONNECT, new R(sc, cb));
       } else { 
@@ -51,6 +58,11 @@ public class TCPClientLoop extends TimeoutLoop {
     }
     return null;
   }
+
+  /**
+   * Used to create a TCPClient from a SocketChannel (typically received by a
+   * server accepting connections)
+   */
   public void createTCPClient (final Callback.TCPClientCB cb, final SocketChannel sc) {
     try {
       if (null == sc) {
@@ -93,7 +105,13 @@ public class TCPClientLoop extends TimeoutLoop {
   public void write (final SocketChannel sc, final Callback.TCPClientCB cb, byte [] bytes) {
     write(sc, cb, ByteBuffer.wrap(bytes));
   }
+
+  /**
+   *  Used to write to a client.
+   */
   public void write (final SocketChannel sc, final Callback.TCPClientCB cb, final ByteBuffer buffer) {
+
+    // check in proper thread.
     if (!this.isLoopThread()) {
       this.addTimeout(new Event.Timeout(){
         public void go(TimeoutLoop loop) {
@@ -102,7 +120,6 @@ public class TCPClientLoop extends TimeoutLoop {
       });
       return;
     }
-    // check in proper thread.
 
     SelectionKey key = sc.keyFor(this.selector);
     if (null == key) {
@@ -114,6 +131,33 @@ public class TCPClientLoop extends TimeoutLoop {
       R r_orig = (R)key.attachment();
       r_orig.push(buffer);
     }
+  }
+
+  public void shutdownOutput (final SocketChannel sc, final Callback.TCPClientCB cb) {
+
+    if (this.isLoopThread()) {
+        try {
+          sc.socket().shutdownOutput(); 
+        } catch (java.io.IOException ioe) {
+          cb.onError(this, sc, ioe);
+        }
+        return;
+    }
+    
+    //
+    // else
+    //
+
+    this.addTimeout(new Event.Timeout() {
+      public void go (TimeoutLoop l) {
+        // TODO cancel all write operations, or check.
+        try {
+          sc.socket().shutdownOutput(); 
+        } catch (java.io.IOException ioe) {
+          cb.onError(TCPClientLoop.this, sc, ioe);
+        }
+      }
+    });
   }
 
   public void close (final SocketChannel sc, final Callback.TCPClientCB client) {
@@ -130,7 +174,7 @@ public class TCPClientLoop extends TimeoutLoop {
     });
   }
 
-  public  void go () {
+  protected void go () {
     assert this.isLoopThread();
     Iterator<SelectionKey> keys = this.selector.selectedKeys().iterator();
     SelectionKey key;
@@ -150,11 +194,13 @@ public class TCPClientLoop extends TimeoutLoop {
 
     super.go();
   }
+
   private final ByteBuffer buf = ByteBuffer.allocateDirect(65535);
 
   private void handleRead (SelectionKey key) {
 
     assert this.isLoopThread();
+    assert key.isReadable();
     
     SocketChannel        sc = (SocketChannel)key.channel();
     Callback.TCPClientCB cb = ((R)key.attachment()).cb;
@@ -182,6 +228,8 @@ public class TCPClientLoop extends TimeoutLoop {
   private void handleWrite(SelectionKey key) {
 
     assert this.isLoopThread();
+    assert key.isWritable();
+
     SocketChannel sc = (SocketChannel)key.channel();
     R             r  = (R)key.attachment();
 
@@ -218,6 +266,7 @@ public class TCPClientLoop extends TimeoutLoop {
   private void handleConnect(SelectionKey key) {
 
     assert this.isLoopThread();
+    assert key.isAcceptable();
 
     SocketChannel        sc = (SocketChannel)key.channel();
     Callback.TCPClientCB cb = ((R)key.attachment()).cb;
@@ -240,14 +289,6 @@ public class TCPClientLoop extends TimeoutLoop {
 
 
 
-  public void shutdownOutput (SocketChannel sc, Callback.TCPClientCB cb) {
-    // TODO cancel all write operations, or check.
-    try {
-      sc.socket().shutdownOutput(); 
-    } catch (java.io.IOException ioe) {
-      cb.onError(this, sc, ioe);
-    }
-  }
 
   static String bin(int num) {
     return Integer.toBinaryString(num);
@@ -280,7 +321,6 @@ public class TCPClientLoop extends TimeoutLoop {
   class R {
     SocketChannel channel;
     Callback.TCPClientCB cb;
-    ByteBuffer buffer;
     Queue<ByteBuffer> bufferList;
     R (SocketChannel c,  Callback.TCPClientCB cb) {
       this.channel = c;
