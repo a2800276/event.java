@@ -33,13 +33,13 @@ public class TimeoutLoop extends Loop {
   // Stores the non expired timeout functions until
   // they expire and are executed.
   //
-  private Queue <T> timeouts;
+  protected Queue <T> timeouts;
 
   // 
   // Stores new Timeouts until they can be safely transfered
   // to the `timouts` queue (see above)
   //
-  private LinkedList<T> newTimeouts;
+  protected LinkedList<T> newTimeouts;
   
   /**
    * reference time for the current iteration of the loop
@@ -139,24 +139,56 @@ public class TimeoutLoop extends Loop {
   /**
    * Thread safe method to inject functionality into the loop
    */
-  public void addTimeout(final Event.Timeout ev) {
-    addTimeout(ev, false);
+  public long addTimeout(final Event.Timeout ev) {
+    return addTimeout(ev, false);
   }
 
   /**
    * Thread safe method to inject repeating functionality into the loop
    */
-  public void addInterval(final Event.Timeout ev) {
-    addTimeout(ev, true);
+  public long addInterval(final Event.Timeout ev) {
+    return addTimeout(ev, true);
+  }
+  
+  /**
+   * Cancel the execution of the timeout.
+   */
+  public void cancelTimeout(final long id) {
+    if (!this.isLoopThread()) {
+      this.addTimeout(new Event.Timeout() {
+        public void go (TimeoutLoop l) {
+          l.cancelTimeout(id);
+        } 
+      });
+      return;
+    }
+    for (T t : this.timeouts) {
+      if (t.id == id) {
+        this.timeouts.remove(t);
+        return;
+      }
+    }
+    //
+    // if the event was added AND cancelled from within the
+    // loop, it may still be in the newTimeouts.
+    //
+    
+    for (T t : this.newTimeouts) {
+      if (t.id == id) {
+        this.newTimeouts.remove(t);
+        return;
+      }
+    }
+    
   }
 
 
-  private void addTimeout(final Event.Timeout ev, boolean interval) {
+  private long addTimeout(final Event.Timeout ev, boolean interval) {
 
     long timesOutOn = System.nanoTime() + (ev.getTimeout()*1000000);
-    T t = new T(timesOutOn, ev, interval);
-
+    T t = null;
     synchronized (this.newTimeouts) {
+      t = new T(timesOutOn, ev, interval);
       // even if we are in the loop thread,
       // we have to add a new timeout to the
       // new timeout queue (to be transfered to
@@ -181,6 +213,7 @@ public class TimeoutLoop extends Loop {
       //
       this.wake();
     }
+    return t.id;
   }
 
   private static long min (long one, long two) {
@@ -235,7 +268,11 @@ public class TimeoutLoop extends Loop {
   static void p (Object o) {
     System.out.println(o);
   }
+
+  long idSeq;
+
   class T implements Comparable<T> {
+    long id;
     Event.Timeout ev;
     long time;
     boolean interval;
@@ -243,6 +280,7 @@ public class TimeoutLoop extends Loop {
       this.time = time;
       this.ev   = ev;
       this.interval = interval;
+      this.id = TimeoutLoop.this.idSeq++;
     }
     public int compareTo (T o) {
       return (int)(this.time - o.time);
