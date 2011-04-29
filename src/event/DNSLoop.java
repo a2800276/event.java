@@ -11,7 +11,7 @@ import java.net.UnknownHostException;
  *
  */
 
-public class DNSLoop extends TimeoutLoop {
+class DNSLoop extends TimeoutLoop {
 
   DNSLoop() {
     super();

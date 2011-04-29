@@ -10,11 +10,11 @@ import java.util.Comparator;
  * Minimal Loop implementation does something. This is basically
  * a simple scheduler that executes tasks (currently not very aptly 
  * named Event.Timeout) on or after a specified time in the future.
- *
+ * <p>
  * This may occur once (addTimeout) or as an interval (addInterval)
- *
+ * <p>
  * Usage:
- *
+ * <pre>
  *   TimeoutLoop l = new TimeoutLoop();
  *               l.addTimeout ( new Event.Timeout(1000) {
  *                 public void go() { 
@@ -25,6 +25,7 @@ import java.util.Comparator;
  *               l.run();
  *
  *               l.stopLoop();
+ * </pre>
  */
 
 public class TimeoutLoop extends Loop {
