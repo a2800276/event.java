@@ -115,5 +115,12 @@ public abstract class Loop extends Thread {
     System.out.println(o);
   }
 
+  static void st (String mes) {
+    p(mes);
+    for (StackTraceElement e : Thread.currentThread().getStackTrace()) {
+      p(e);
+    }
+  }
+
   
 }

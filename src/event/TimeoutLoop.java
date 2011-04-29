@@ -53,6 +53,15 @@ public class TimeoutLoop extends Loop {
     this.newTimeouts = new LinkedList<T>();
   }
 
+  void dump (String mes) {
+    p(mes);
+    p("thr: "+Thread.currentThread().getId());
+    p("lth: "+this.loopThread.getId());
+    p("new: "+newTimeouts);
+    p("tos: "+timeouts);
+    p("run: "+maxSleep);
+  }
+
   protected void go () {
     assert this.isLoopThread();
 
@@ -124,7 +133,6 @@ public class TimeoutLoop extends Loop {
         break;
       }
     } while (0 != this.timeouts.size());
-
     return count;
   } 
   

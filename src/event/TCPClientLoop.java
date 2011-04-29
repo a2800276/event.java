@@ -13,9 +13,24 @@ import java.net.SocketAddress;
 
 public class TCPClientLoop extends TimeoutLoop {
   
+
   public TCPClientLoop () {
     super();
+    this.dnsLoop = new DNSLoop();
   }
+  
+  private DNSLoop dnsLoop;
+
+  public void run() {
+    this.dnsLoop.start();
+    super.run();
+  }
+  
+  public void stopLoop() {
+    this.dnsLoop.stopLoop();
+    super.stopLoop();
+  }
+
   
   /**
    * May result in Callback onError being informed of the following Exceptions:
@@ -23,7 +38,18 @@ public class TCPClientLoop extends TimeoutLoop {
    *  java.net.UnknownHostException
    *  java.nio.channels.ClosedChannelException
    */
-  public SocketChannel createTCPClient (final Callback.TCPClientCB cb, String host, int port) {
+  public void createTCPClient (final Callback.TCPClientCB cb, final String host, final int port) {
+    this.dnsLoop.lookup(host, new DNSLoop.CB() {
+      public void addr (InetAddress addr, java.net.UnknownHostException une) {
+        if (null != une) {
+          cb.onError(TCPClientLoop.this, une);
+        } else {
+          TCPClientLoop.this.createTCPClient(cb, addr, port);
+        }
+      }   
+    });
+  }   
+  public void createTCPClient (final Callback.TCPClientCB cb, final InetAddress host, final int port) {
     try {
       final SocketChannel sc = SocketChannel.open();
                           sc.configureBlocking(false);
@@ -35,7 +61,7 @@ public class TCPClientLoop extends TimeoutLoop {
       // the result, or by using an async library. (http://www.xbill.org/dnsjava/)
       //
 
-      SocketAddress remote = new InetSocketAddress(InetAddress.getByName(host), port);
+      SocketAddress remote = new InetSocketAddress(host, port);
 
       if (this.isLoopThread()) {
         sc.register(this.selector, SelectionKey.OP_CONNECT, new R(sc, cb));
@@ -43,20 +69,14 @@ public class TCPClientLoop extends TimeoutLoop {
         this.addTimeout(new Event.Timeout(){
           public void go(TimeoutLoop loop) {
             TCPClientLoop l = (TCPClientLoop)loop;
-            try {
-              sc.register(l.selector, SelectionKey.OP_CONNECT, new R(sc, cb));
-            } catch (java.nio.channels.ClosedChannelException cce) {
-              cb.onError((TCPClientLoop)l, sc, cce);
-            } 
+                          l.createTCPClient(cb, host, port);
           }
         });
       }
       sc.connect(remote);	
-      return sc;
     } catch (Throwable t) {
       cb.onError(this, t);
     }
-    return null;
   }
 
   /**
@@ -86,11 +106,7 @@ public class TCPClientLoop extends TimeoutLoop {
         this.addTimeout(new Event.Timeout() {
           public void go (TimeoutLoop l) {
             TCPClientLoop loop = (TCPClientLoop) l;
-            try {
-              sc.register(loop.selector, SelectionKey.OP_READ, new R(sc, cb));
-            } catch (java.nio.channels.ClosedChannelException cce) {
-              cb.onError(loop, sc, cce);
-            }
+                          loop.createTCPClient(cb, sc);
           }
         });
       }
@@ -149,13 +165,9 @@ public class TCPClientLoop extends TimeoutLoop {
     //
 
     this.addTimeout(new Event.Timeout() {
-      public void go (TimeoutLoop l) {
+      public void go (TimeoutLoop loop) {
         // TODO cancel all write operations, or check.
-        try {
-          sc.socket().shutdownOutput(); 
-        } catch (java.io.IOException ioe) {
-          cb.onError(TCPClientLoop.this, sc, ioe);
-        }
+        ((TCPClientLoop)loop).shutdownOutput(sc, cb);
       }
     });
   }
@@ -293,7 +305,15 @@ public class TCPClientLoop extends TimeoutLoop {
   static String bin(int num) {
     return Integer.toBinaryString(num);
   }
+  static String to_s (ByteBuffer buf) {
+    StringBuilder b = new StringBuilder();
+    while (buf.position() != buf.limit()) {
+      b.append((char)buf.get());
+    }
+    return b.toString();
+  }
   public static void main (String [] args) {
+    
     TCPClientLoop loop = new TCPClientLoop();
     loop.start();
     Callback.TCPClientCB cb = new Callback.TCPClientCB() {
@@ -302,11 +322,14 @@ public class TCPClientLoop extends TimeoutLoop {
         byte [] bs = "GET / HTTP/1.1\r\n\r\n".getBytes();
         l.write(ch, this, ByteBuffer.wrap(bs));
       }
-      public void onData(TCPClientLoop l, SocketChannel ch, ByteBuffer b) {
-        p("onData: "+b);
+      public void onData(TCPClientLoop l, SocketChannel sc, ByteBuffer b) {
+        p("onData: "+to_s(b));
+
         //l.shutdownOutput(ch, this);
         byte [] bs = "GET / HTTP/1.1\r\n\r\n".getBytes();
-        l.write(ch, this, ByteBuffer.wrap(bs));
+        //l.write(ch, this, ByteBuffer.wrap(bs));
+        l.close(sc, this);
+        l.stopLoop();
       }
       public void onClose(TCPClientLoop l, SocketChannel ch) {
         p("closed: "+ch);
@@ -315,7 +338,7 @@ public class TCPClientLoop extends TimeoutLoop {
 
       }
     };
-    loop.createTCPClient(cb, args[0], 8000); 
+    loop.createTCPClient(cb, args[0], 80); 
   }
 
   class R {
