@@ -1,6 +1,6 @@
 package event.stress;
 
-import event.Event;
+import event.Callback;
 import event.TimeoutLoop;
 
 import java.util.Queue;
@@ -36,30 +36,30 @@ public class TimeoutStressTest  {
     }
     p("hits      " + numHit);
     p("mrs:      " + numMiss);
-    p("in:       " + (System.nanoTime()-start) / 1000000);
+    p("in:(ms)   " + (System.nanoTime()-start) / 1000000);
 
     p("expected: " + (numHit * 5)/max );  
   }
 
   void stressTest () {
-    Event.Timeout t1 = new Event.Timeout () {
+    Callback.Timeout t1 = new Callback.Timeout () {
       public void go (TimeoutLoop loop) {
         Worker w = getWorker();
         if (null == w) {
           // try again
-          loop.addTimeout(this);
+          loop.addTimeout(workerCount%5, this);
           ++numMiss;
           return;
         }
         ++numHit;
-        loop.addTimeout(w);
+        loop.addTimeout(workerCount%5, w);
       }
     };
 
     if (this.loop.isLoopThread()) {
       t1.go(this.loop);
     } else {
-      this.loop.addTimeout(t1);
+      this.loop.addTimeout(workerCount%5, t1);
     }
 
 
@@ -85,10 +85,11 @@ public class TimeoutStressTest  {
   }
   
   static int workerCount;
-  class Worker extends Event.Timeout {
+  class Worker extends Callback.Timeout {
     int id;
     Worker() {
-      super( (long)(workerCount %5) ); 
+      //super( (long)(workerCount %5) ); 
+      super();
       this.id = workerCount++;
     }
 

@@ -66,7 +66,7 @@ public class TCPClientLoop extends TimeoutLoop {
       if (this.isLoopThread()) {
         sc.register(this.selector, SelectionKey.OP_CONNECT, new R(sc, cb));
       } else { 
-        this.addTimeout(new Event.Timeout(){
+        this.addTimeout(new Callback.Timeout(){
           public void go(TimeoutLoop loop) {
             TCPClientLoop l = (TCPClientLoop)loop;
                           l.createTCPClient(cb, host, port);
@@ -103,7 +103,7 @@ public class TCPClientLoop extends TimeoutLoop {
       if (this.isLoopThread()) {
         sc.register(this.selector, SelectionKey.OP_READ, new R(sc, cb));
       } else {
-        this.addTimeout(new Event.Timeout() {
+        this.addTimeout(new Callback.Timeout() {
           public void go (TimeoutLoop l) {
             TCPClientLoop loop = (TCPClientLoop) l;
                           loop.createTCPClient(cb, sc);
@@ -129,7 +129,7 @@ public class TCPClientLoop extends TimeoutLoop {
 
     // check in proper thread.
     if (!this.isLoopThread()) {
-      this.addTimeout(new Event.Timeout(){
+      this.addTimeout(new Callback.Timeout(){
         public void go(TimeoutLoop loop) {
           ((TCPClientLoop)loop).write(sc, cb, buffer);
         }
@@ -164,7 +164,7 @@ public class TCPClientLoop extends TimeoutLoop {
     // else
     //
 
-    this.addTimeout(new Event.Timeout() {
+    this.addTimeout(new Callback.Timeout() {
       public void go (TimeoutLoop loop) {
         // TODO cancel all write operations, or check.
         ((TCPClientLoop)loop).shutdownOutput(sc, cb);
@@ -175,7 +175,7 @@ public class TCPClientLoop extends TimeoutLoop {
   public void close (final SocketChannel sc, final Callback.TCPClientCB client) {
     // can't close channel immediately, because stuff may still need to be written...
     // ...but... if the channel is not writable, not everything will be written ...
-    this.addTimeout(new Event.Timeout() {
+    this.addTimeout(new Callback.Timeout() {
       public void go (TimeoutLoop l) {
         try {
           sc.close();

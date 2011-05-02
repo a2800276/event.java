@@ -8,15 +8,19 @@ import java.util.Comparator;
 
 /**
  * Minimal Loop implementation does something. This is basically
- * a simple scheduler that executes tasks (currently not very aptly 
- * named Event.Timeout) on or after a specified time in the future.
+ * a simple scheduler that executes tasks  on or after a specified 
+ * time in the future.
+ *
  * <p>
  * This may occur once (addTimeout) or as an interval (addInterval)
+ *
  * <p>
+ *
  * Usage:
+ *
  * <pre>
  *   TimeoutLoop l = new TimeoutLoop();
- *               l.addTimeout ( new Event.Timeout(1000) {
+ *               l.addTimeout ( 1000, new Callback.Timeout() {
  *                 public void go() { 
  *                  // do something. Whatever you define to be
  *                  // done here will be executed in about 1 second.
@@ -127,7 +131,7 @@ public class TimeoutLoop extends Loop {
         this.timeouts.remove(timeout);
         ++count;
         if (timeout.interval) { // return intervals to queue
-          timeout.time = this.loopTime + (timeout.ev.getTimeout()*1000000);
+          timeout.time = this.loopTime + (timeout.timeout*1000000);
           this.timeouts.add(timeout);
         }
       } else {
@@ -140,15 +144,19 @@ public class TimeoutLoop extends Loop {
   /**
    * Thread safe method to inject functionality into the loop
    */
-  public long addTimeout(final Event.Timeout ev) {
-    return addTimeout(ev, false);
+  public long addTimeout(long timeout, final Callback.Timeout ev) {
+    return addTimeout(timeout, ev, false);
+  }
+
+  public long addTimeout(final Callback.Timeout ev) {
+    return addTimeout(0, ev);
   }
 
   /**
    * Thread safe method to inject repeating functionality into the loop
    */
-  public long addInterval(final Event.Timeout ev) {
-    return addTimeout(ev, true);
+  public long addInterval(long timeout, final Callback.Timeout ev) {
+    return addTimeout(timeout, ev, true);
   }
   
   /**
@@ -156,7 +164,7 @@ public class TimeoutLoop extends Loop {
    */
   public void cancelTimeout(final long id) {
     if (!this.isLoopThread()) {
-      this.addTimeout(new Event.Timeout() {
+      this.addTimeout(new Callback.Timeout() {
         public void go (TimeoutLoop l) {
           l.cancelTimeout(id);
         } 
@@ -184,12 +192,13 @@ public class TimeoutLoop extends Loop {
   }
 
 
-  private long addTimeout(final Event.Timeout ev, boolean interval) {
+  private long addTimeout(long timeout, final Callback.Timeout ev, boolean interval) {
 
-    long timesOutOn = System.nanoTime() + (ev.getTimeout()*1000000);
+    long timesOutOn = System.nanoTime() + (timeout*1000000);
     T t = null;
     synchronized (this.newTimeouts) {
-      t = new T(timesOutOn, ev, interval);
+      t = new T(timesOutOn, ev, timeout, interval);
+
       // even if we are in the loop thread,
       // we have to add a new timeout to the
       // new timeout queue (to be transfered to
@@ -200,7 +209,7 @@ public class TimeoutLoop extends Loop {
       // run indefinitely if an `immediate` timeout
       // is added from within the loop thread. E.g.:
       // 
-      // new Event.Timeout() {
+      // new Callback.Timeout() {
       //  public void go(TimeoutLoop loop) {
       //    loop.addTimeout(this);
       //  }
@@ -236,19 +245,19 @@ public class TimeoutLoop extends Loop {
     //p(loop);
     
     loop.start();
-    loop.addTimeout(new Event.Timeout(750) {
+    loop.addTimeout(750, new Callback.Timeout() {
       public void go (TimeoutLoop l) { p("timeout");}
     });
 
-    loop.addTimeout(new Event.Timeout() {
+    loop.addTimeout(new Callback.Timeout() {
       public void go (TimeoutLoop l) { p("timeout-1");}
     });
 
-    loop.addTimeout(new Event.Timeout(850) {
+    loop.addTimeout(850, new Callback.Timeout() {
       public void go (TimeoutLoop l) { p("timeout2");}
     });
 
-    loop.addTimeout(new Event.Timeout(150) {
+    loop.addTimeout(150, new Callback.Timeout() {
       int i;
       public void go (TimeoutLoop l) { 
         p("timeout0");
@@ -258,7 +267,7 @@ public class TimeoutLoop extends Loop {
       }
     });
 
-    loop.addInterval(new Event.Timeout(100) {
+    loop.addInterval(100, new Callback.Timeout() {
       public void go (TimeoutLoop l) { p("interval");}
     });
     
@@ -273,12 +282,27 @@ public class TimeoutLoop extends Loop {
   long idSeq;
 
   class T implements Comparable<T> {
+    /**
+     * unique id used to cancel timeouts
+     */
     long id;
-    Event.Timeout ev;
+    /**
+     *  callback to execute when the timeout expires.
+     */
+    Callback.Timeout ev;
+    /**
+     * clock time after which the timeout may be executed
+     */
     long time;
+    /**
+     * absolute time interval after which the timeout is to 
+     * be executed.
+     */
+    long timeout;
     boolean interval;
-    T(long time, Event.Timeout ev, boolean interval) {
+    T(long time, Callback.Timeout ev, long timeout, boolean interval) {
       this.time = time;
+      this.timeout = timeout;
       this.ev   = ev;
       this.interval = interval;
       this.id = TimeoutLoop.this.idSeq++;

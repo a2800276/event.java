@@ -10,15 +10,15 @@ public class CancelTimeoutTest {
     final TimeoutLoop loop = new TimeoutLoop();
                       loop.start();
 
-    final Event.Timeout toCancel = new Event.Timeout(1000) {
+    final Callback.Timeout toCancel = new Callback.Timeout() {
       public void go(TimeoutLoop l) {
         fail("should have been canceled");
       } 
     };
 
-    long tid  = loop.addTimeout(toCancel);
+    long tid  = loop.addTimeout(1000, toCancel);
 
-    long tid2 = loop.addTimeout(new Event.Timeout() {
+    long tid2 = loop.addTimeout(new Callback.Timeout() {
       public void go(TimeoutLoop l) {
         if (loop != l) {
           fail ("not the correct loop!");
@@ -32,7 +32,7 @@ public class CancelTimeoutTest {
 
     loop.cancelTimeout(tid);
     
-    tid2 = loop.addTimeout(new Event.Timeout() {
+    tid2 = loop.addTimeout(new Callback.Timeout() {
       public void go(TimeoutLoop l) {
         if (loop != l) {
           fail ("not the correct loop 2!");
@@ -46,7 +46,7 @@ public class CancelTimeoutTest {
     });
   }
 
-  static boolean contains(java.util.Collection<TimeoutLoop.T> l, Event.Timeout e) {
+  static boolean contains(java.util.Collection<TimeoutLoop.T> l, Callback.Timeout e) {
     for (TimeoutLoop.T t : l) {
       if (t.ev == e) {
         return true;
@@ -58,18 +58,18 @@ public class CancelTimeoutTest {
     final TimeoutLoop loop = new TimeoutLoop();
                       loop.start();
 
-    final Event.Timeout toCancel = new Event.Timeout(1000) {
+    final Callback.Timeout toCancel = new Callback.Timeout() {
       public void go(TimeoutLoop l) {
         fail("should have been canceled");
       } 
     };
 
-    long tid  = loop.addInterval(toCancel);
+    long tid  = loop.addInterval(1000, toCancel);
 
 
     loop.cancelTimeout(tid);
     
-    loop.addTimeout(new Event.Timeout() {
+    loop.addTimeout(new Callback.Timeout() {
       public void go(TimeoutLoop l) {
         assert l == loop;
         if (contains(loop.timeouts, toCancel)) {
@@ -84,22 +84,22 @@ public class CancelTimeoutTest {
     final TimeoutLoop loop = new TimeoutLoop();
                       loop.start();
 
-    final Event.Timeout toCancel = new Event.Timeout(1000) {
+    final Callback.Timeout toCancel = new Callback.Timeout() {
       public void go(TimeoutLoop l) {
         fail("should have been canceled");
       } 
     };
 
-    loop.addTimeout(new Event.Timeout(){
+    loop.addTimeout(new Callback.Timeout(){
       public void go (TimeoutLoop l) {
-        long tid = l.addTimeout(toCancel);
+        long tid = l.addTimeout(1000, toCancel);
         loop.cancelTimeout(tid);
       }
     });
 
 
     
-    loop.addTimeout(new Event.Timeout() {
+    loop.addTimeout(new Callback.Timeout() {
       public void go(TimeoutLoop l) {
         assert l == loop;
         if (contains(loop.timeouts, toCancel)) {

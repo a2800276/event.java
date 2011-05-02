@@ -24,7 +24,7 @@ public class TCPServerLoop extends TCPClientLoop {
       if (this.isLoopThread()) {
         ssc.register(this.selector, SelectionKey.OP_ACCEPT, cb);
       } else {
-        this.addTimeout(new Event.Timeout(){
+        this.addTimeout(new Callback.Timeout(){
           public void go(TimeoutLoop l) {
             try {
               ssc.register(l.selector, SelectionKey.OP_ACCEPT, cb);

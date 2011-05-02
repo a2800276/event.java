@@ -18,7 +18,7 @@ class DNSLoop extends TimeoutLoop {
   }
 
   void lookup (final String host, final CB callback) {
-    addTimeout(new Event.Timeout() {
+    addTimeout(new Callback.Timeout() {
       public void go (TimeoutLoop loop) {
         try {
           InetAddress addr = InetAddress.getByName(host);
