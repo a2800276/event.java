@@ -38,7 +38,7 @@ public class TCPClientLoop extends TimeoutLoop {
    *  java.net.UnknownHostException
    *  java.nio.channels.ClosedChannelException
    */
-  public void createTCPClient (final Callback.TCPClientCB cb, final String host, final int port) {
+  public void createTCPClient (final Callback.TCPClient cb, final String host, final int port) {
     this.dnsLoop.lookup(host, new DNSLoop.CB() {
       public void addr (InetAddress addr, java.net.UnknownHostException une) {
         if (null != une) {
@@ -49,7 +49,7 @@ public class TCPClientLoop extends TimeoutLoop {
       }   
     });
   }   
-  public void createTCPClient (final Callback.TCPClientCB cb, final InetAddress host, final int port) {
+  public void createTCPClient (final Callback.TCPClient cb, final InetAddress host, final int port) {
     try {
       final SocketChannel sc = SocketChannel.open();
                           sc.configureBlocking(false);
@@ -83,7 +83,7 @@ public class TCPClientLoop extends TimeoutLoop {
    * Used to create a TCPClient from a SocketChannel (typically received by a
    * server accepting connections)
    */
-  public void createTCPClient (final Callback.TCPClientCB cb, final SocketChannel sc) {
+  public void createTCPClient (final Callback.TCPClient cb, final SocketChannel sc) {
     try {
       if (null == sc) {
         cb.onError(this, "channel is null");
@@ -118,14 +118,14 @@ public class TCPClientLoop extends TimeoutLoop {
   /**
    * Utility, avoid if possible! slowish
    */
-  public void write (final SocketChannel sc, final Callback.TCPClientCB cb, byte [] bytes) {
+  public void write (final SocketChannel sc, final Callback.TCPClient cb, byte [] bytes) {
     write(sc, cb, ByteBuffer.wrap(bytes));
   }
 
   /**
    *  Used to write to a client.
    */
-  public void write (final SocketChannel sc, final Callback.TCPClientCB cb, final ByteBuffer buffer) {
+  public void write (final SocketChannel sc, final Callback.TCPClient cb, final ByteBuffer buffer) {
 
     // check in proper thread.
     if (!this.isLoopThread()) {
@@ -149,7 +149,7 @@ public class TCPClientLoop extends TimeoutLoop {
     }
   }
 
-  public void shutdownOutput (final SocketChannel sc, final Callback.TCPClientCB cb) {
+  public void shutdownOutput (final SocketChannel sc, final Callback.TCPClient cb) {
 
     if (this.isLoopThread()) {
         try {
@@ -172,7 +172,7 @@ public class TCPClientLoop extends TimeoutLoop {
     });
   }
 
-  public void close (final SocketChannel sc, final Callback.TCPClientCB client) {
+  public void close (final SocketChannel sc, final Callback.TCPClient client) {
     // can't close channel immediately, because stuff may still need to be written...
     // ...but... if the channel is not writable, not everything will be written ...
     this.addTimeout(new Callback.Timeout() {
@@ -215,7 +215,7 @@ public class TCPClientLoop extends TimeoutLoop {
     assert key.isReadable();
     
     SocketChannel        sc = (SocketChannel)key.channel();
-    Callback.TCPClientCB cb = ((R)key.attachment()).cb;
+    Callback.TCPClient cb = ((R)key.attachment()).cb;
 
     buf.clear();
     int i = 0;
@@ -281,7 +281,7 @@ public class TCPClientLoop extends TimeoutLoop {
     assert key.isAcceptable();
 
     SocketChannel        sc = (SocketChannel)key.channel();
-    Callback.TCPClientCB cb = ((R)key.attachment()).cb;
+    Callback.TCPClient cb = ((R)key.attachment()).cb;
     try {
       sc.finishConnect();
     } catch (java.io.IOException ioe) {
@@ -316,7 +316,7 @@ public class TCPClientLoop extends TimeoutLoop {
     
     TCPClientLoop loop = new TCPClientLoop();
     loop.start();
-    Callback.TCPClientCB cb = new Callback.TCPClientCB() {
+    Callback.TCPClient cb = new Callback.TCPClient() {
       public void onConnect(TCPClientLoop l, SocketChannel ch) {
         p("onConnect: "+ch);
         byte [] bs = "GET / HTTP/1.1\r\n\r\n".getBytes();
@@ -343,9 +343,9 @@ public class TCPClientLoop extends TimeoutLoop {
 
   class R {
     SocketChannel channel;
-    Callback.TCPClientCB cb;
+    Callback.TCPClient cb;
     Queue<ByteBuffer> bufferList;
-    R (SocketChannel c,  Callback.TCPClientCB cb) {
+    R (SocketChannel c,  Callback.TCPClient cb) {
       this.channel = c;
       this.cb = cb;
       this.bufferList = new LinkedList<ByteBuffer>();

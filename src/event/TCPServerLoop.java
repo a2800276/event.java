@@ -15,7 +15,7 @@ public class TCPServerLoop extends TCPClientLoop {
    * IOException
    * java.nio.channels.ClosedChannelException
    */
-  public void createTCPServer (final Callback.TCPServerCB cb, SocketAddress sa) {
+  public void createTCPServer (final Callback.TCPServer cb, SocketAddress sa) {
     try {
       final ServerSocketChannel ssc = ServerSocketChannel.open();
       ssc.configureBlocking(false);
@@ -59,7 +59,7 @@ public class TCPServerLoop extends TCPClientLoop {
     assert key.isAcceptable();
 
     ServerSocketChannel ssc = (ServerSocketChannel)key.channel();
-    Callback.TCPServerCB cb = (Callback.TCPServerCB)key.attachment();
+    Callback.TCPServer cb = (Callback.TCPServer)key.attachment();
     SocketChannel sc = null;
     try {
       sc = ssc.accept();

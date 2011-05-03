@@ -44,7 +44,7 @@ public interface Callback {
    * Basic implementation of the callbacks that need to be handled
    * when implementing a TCP client
    */
-  static abstract class TCPClientCB implements ErrorCallback {
+  static abstract class TCPClient implements ErrorCallback {
     /**
      * Functionality to be executed with a connection is established on this 
      * client,  default impl is noop, you may want to override this to do 
@@ -82,7 +82,7 @@ public interface Callback {
     };
   }
   
-  static abstract class TCPServerCB implements ErrorCallback {
+  static abstract class TCPServer implements ErrorCallback {
     // useful ? prbly not. currently noop, override for ???
     // may disappear
     public  void onConnect (TCPServerLoop l, ServerSocketChannel ssc){}
