@@ -57,7 +57,11 @@ public class TimeoutStressTest  {
     };
 
     if (this.loop.isLoopThread()) {
-      t1.go(this.loop);
+      try {
+        t1.go(this.loop);
+      } catch (Throwable t) {
+        t1.onError(this.loop, t);
+      }
     } else {
       this.loop.addTimeout(workerCount%5, t1);
     }

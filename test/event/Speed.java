@@ -63,7 +63,7 @@ static long time;
     }
   }
 
-  static class Client extends Callback.TCPClientCB {
+  static class Client extends Callback.TCPClient {
     int count;
     public void onConnect(TCPClientLoop l, SocketChannel sc) {
       l.write(sc, this, "hello".getBytes());
@@ -85,7 +85,7 @@ static long time;
     }
   } // Client
 
-  static class Server extends Callback.TCPServerCB {
+  static class Server extends Callback.TCPServer {
     public void onAccept(TCPServerLoop l, ServerSocketChannel ssc, SocketChannel sc) {
       l.createTCPClient(new Client(), sc);
     }

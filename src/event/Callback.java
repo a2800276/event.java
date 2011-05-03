@@ -39,12 +39,24 @@ public interface Callback {
       System.exit(1);
     }
   }
+  /** default error handlers hand off handlings errors to the loop,
+  /* this may not be what you want, as the loop's default error
+  /* handlers shut down the vm.
+   */
+  static abstract class ErrorCallbackBase implements ErrorCallback {
   
+    public void onError (Loop l, Throwable t) {
+      l.onError(t);
+    }
+    public void onError (Loop l, String msg) {
+      l.onError(msg);
+    }
+  }  
   /**
    * Basic implementation of the callbacks that need to be handled
    * when implementing a TCP client
    */
-  static abstract class TCPClient implements ErrorCallback {
+  static abstract class TCPClient extends ErrorCallbackBase {
     /**
      * Functionality to be executed with a connection is established on this 
      * client,  default impl is noop, you may want to override this to do 
@@ -63,26 +75,12 @@ public interface Callback {
      */
 	  public  void onClose    (TCPClientLoop l, SocketChannel c) {}
 
-	  //public void write (TCPClientLoop l, SocketChannel c, ByteBuffer buf) {
-    //  l.queueOp(c, SelectionKey.OP_WRITE, this, buf);
-    //};
-    
-    // default error handlers hand off handlings errors to the loop,
-    // this may not be what you want, as the loop's default error
-    // handlers shut down the vm.
-
-    public void onError (Loop l, Throwable t) {
-      l.onError(t);
-    }
-    public void onError (Loop l, String msg) {
-      l.onError(msg);  
-    }
     public void onError (TCPClientLoop l, SocketChannel c, Throwable t){
       this.onError(l, t);
     };
   }
   
-  static abstract class TCPServer implements ErrorCallback {
+  static abstract class TCPServer extends ErrorCallbackBase {
     // useful ? prbly not. currently noop, override for ???
     // may disappear
     public  void onConnect (TCPServerLoop l, ServerSocketChannel ssc){}
@@ -91,12 +89,6 @@ public interface Callback {
     // perhaps onShutdown ?
     // default impl is noop, override for cleanup
     public  void onClose (TCPServerLoop l, ServerSocketChannel ssc){}
-    public void onError(Loop l, Throwable t) {
-      l.onError(t);
-    }
-    public void onError (Loop l, String msg) {
-      l.onError(msg);  
-    }
     public void onError(TCPServerLoop l, ServerSocketChannel ssc, Throwable t) {
       this.onError(l, t);
     }
@@ -108,13 +100,13 @@ public interface Callback {
    * is executed as soon as possible after the provided
    * timeout perios has expired.
    */
-  public abstract class Timeout implements Callback {
+  public abstract class Timeout extends ErrorCallbackBase {
     public Timeout() {}
 
     /**
      * Functionality to be executed by this timeout.
      */
-    public abstract void go(TimeoutLoop l);
+    public abstract void go(TimeoutLoop l) throws Throwable;
   }
 
 

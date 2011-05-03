@@ -127,7 +127,11 @@ public class TimeoutLoop extends Loop {
     do {
       timeout = this.timeouts.peek();
       if (this.loopTime >= timeout.time) {
-        timeout.ev.go(this);
+        try {
+          timeout.ev.go(this);
+        } catch (Throwable t) {
+          timeout.ev.onError(this, t);
+        }
         this.timeouts.remove(timeout);
         ++count;
         if (timeout.interval) { // return intervals to queue
