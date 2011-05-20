@@ -4,6 +4,7 @@ import java.util.Queue;
 import java.util.Iterator;
 import java.util.LinkedList;
 
+import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.ByteBuffer;
@@ -154,7 +155,7 @@ public class TCPClientLoop extends TimeoutLoop {
     if (this.isLoopThread()) {
         try {
           sc.socket().shutdownOutput(); 
-        } catch (java.io.IOException ioe) {
+        } catch (IOException ioe) {
           cb.onError(this, sc, ioe);
         }
         return;
@@ -174,16 +175,38 @@ public class TCPClientLoop extends TimeoutLoop {
 
   public void close (final SocketChannel sc, final Callback.TCPClient client) {
     // can't close channel immediately, because stuff may still need to be written...
-    // ...but... if the channel is not writable, not everything will be written ...
+    // the socket will remain open until all pending data is written. 
     this.addTimeout(new Callback.Timeout() {
       public void go (TimeoutLoop l) {
-        try {
-          sc.close();
-        } catch (Throwable t) {
-          client.onError(TCPClientLoop.this, sc, t);
-        }
+          R r = r(sc);
+          if (r != null && !r.dataPending()) {
+            handleClose(sc); 
+          } else {
+            r.closePending = true;
+          }
       }
     });
+  }
+
+  R r (SocketChannel sc) {
+    SelectionKey key = sc.keyFor(this.selector);
+    assert key != null;
+    return (R)key.attachment();
+  }
+
+  void handleClose (SocketChannel sc) {
+    SelectionKey key = sc.keyFor(this.selector);
+    assert key != null;
+    R r = (R)key.attachment();
+    key.cancel();
+    try {
+      sc.close();
+    } catch (IOException ioe) {
+      r.cb.onError(TCPClientLoop.this, sc, ioe);
+    }
+    if (null != r && sc.socket().isClosed()) {
+      r.cb.onClose(this, sc);
+    }
   }
 
   protected void go () {
@@ -221,7 +244,7 @@ public class TCPClientLoop extends TimeoutLoop {
     int i = 0;
     try {
       i = sc.read(buf);
-    } catch (java.io.IOException ioe) {
+    } catch (IOException ioe) {
       cb.onError(this, sc, ioe);
       return;
     }
@@ -252,7 +275,7 @@ public class TCPClientLoop extends TimeoutLoop {
       try {
         long num = sc.write(buffer);
         //p("wrote: "+num);
-      } catch (java.io.IOException ioe) {
+      } catch (IOException ioe) {
         r.cb.onError(this, sc, ioe);
         //todo: received an error on write, what to do?
         //  * about unwritten data ...
@@ -272,6 +295,9 @@ public class TCPClientLoop extends TimeoutLoop {
     //p(sc.socket().getLocalPort()+">handleWrite:"+bin(key.interestOps()));  
       key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
     //p(sc.socket().getLocalPort()+"<handleWrite:"+bin(key.interestOps()));  
+      if (r.closePending) {
+        handleClose(sc);
+      }
     }
   }
   
@@ -284,7 +310,7 @@ public class TCPClientLoop extends TimeoutLoop {
     Callback.TCPClient cb = ((R)key.attachment()).cb;
     try {
       sc.finishConnect();
-    } catch (java.io.IOException ioe) {
+    } catch (IOException ioe) {
       cb.onError(this, sc, ioe);
       return;
     }
@@ -345,6 +371,8 @@ public class TCPClientLoop extends TimeoutLoop {
     SocketChannel channel;
     Callback.TCPClient cb;
     Queue<ByteBuffer> bufferList;
+    boolean closePending;
+
     R (SocketChannel c,  Callback.TCPClient cb) {
       this.channel = c;
       this.cb = cb;
@@ -352,6 +380,9 @@ public class TCPClientLoop extends TimeoutLoop {
     }
     void push (ByteBuffer buffer) {
       this.bufferList.add(buffer);
+    }
+    boolean dataPending() {
+      return this.bufferList.size() != 0;
     }
   }
 
