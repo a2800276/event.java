@@ -89,9 +89,17 @@ public interface Callback {
     public void onError (TCPClientLoop l, SocketChannel c, Throwable t){
       this.onError(l, t);
     };
+    
+    /**
+     * Very fine grained feedback to keep track of precisely which data
+     * has actually been written to the network.
+     * @param c channel the data was written to
+     * @param b buffer from which data was written
+     * @param pos initial position in buffer (where the data written started)
+     * @param num number of bytes written
+     */
+    public void onWrite(TCPClientLoop l, SocketChannel c, ByteBuffer b, int pos, int num) {};
 
-    // TODO onWrite to be able to determine whether data has been
-    // written.
   }
  
 

@@ -51,32 +51,32 @@ public class TCPClientLoop extends TimeoutLoop {
     });
   }   
   public void createTCPClient (final Callback.TCPClient cb, final InetAddress host, final int port) {
-    try {
-      final SocketChannel sc = SocketChannel.open();
-                          sc.configureBlocking(false);
-      
-      //
-      // todo async dns
-      //    either:
-      // by calling `getByName` in a seperate thread and injecting
-      // the result, or by using an async library. (http://www.xbill.org/dnsjava/)
-      //
+    if (this.isLoopThread()) {
+      try {
+        final SocketChannel sc = SocketChannel.open();
+        sc.configureBlocking(false);
 
-      SocketAddress remote = new InetSocketAddress(host, port);
+        //
+        // todo async dns
+        //    either:
+        // by calling `getByName` in a seperate thread and injecting
+        // the result, or by using an async library. (http://www.xbill.org/dnsjava/)
+        //
 
-      if (this.isLoopThread()) {
+        SocketAddress remote = new InetSocketAddress(host, port);
+
         sc.register(this.selector, SelectionKey.OP_CONNECT, new R(sc, cb));
-      } else { 
-        this.addTimeout(new Callback.Timeout(){
-          public void go(TimeoutLoop loop) {
-            TCPClientLoop l = (TCPClientLoop)loop;
-                          l.createTCPClient(cb, host, port);
-          }
-        });
+        sc.connect(remote);	
+      } catch (Throwable t) {
+        cb.onError(this, t);
       }
-      sc.connect(remote);	
-    } catch (Throwable t) {
-      cb.onError(this, t);
+    } else { 
+      this.addTimeout(new Callback.Timeout(){
+        public void go(TimeoutLoop loop) {
+          TCPClientLoop l = (TCPClientLoop)loop;
+          l.createTCPClient(cb, host, port);
+        }
+      });
     }
   }
 
@@ -85,35 +85,36 @@ public class TCPClientLoop extends TimeoutLoop {
    * server accepting connections)
    */
   public void createTCPClient (final Callback.TCPClient cb, final SocketChannel sc) {
-    try {
-      if (null == sc) {
-        cb.onError(this, "channel is null");
-        return;
-      }
-      if (!sc.isConnected()) {
-        cb.onError(this, "channel not connected!");
-        return;
-      }
-      if (sc.isBlocking()) {
-        sc.configureBlocking(false);
-        if (sc.isBlocking()) {
-          cb.onError(this, "can't make channel non-blocking");
+    if (this.isLoopThread()) {
+      try {
+        if (null == sc) {
+          cb.onError(this, "channel is null");
           return;
+        }
+        if (!sc.isConnected()) {
+          cb.onError(this, "channel not connected!");
+          return;
+        }
+        if (sc.isBlocking()) {
+          sc.configureBlocking(false);
+          if (sc.isBlocking()) {
+            cb.onError(this, "can't make channel non-blocking");
+            return;
+          } 
         } 
-      } 
-      if (this.isLoopThread()) {
         sc.register(this.selector, SelectionKey.OP_READ, new R(sc, cb));
-      } else {
-        this.addTimeout(new Callback.Timeout() {
-          public void go (TimeoutLoop l) {
-            TCPClientLoop loop = (TCPClientLoop) l;
-                          loop.createTCPClient(cb, sc);
-          }
-        });
-      }
 
-    } catch (Throwable t) {
-      cb.onError(this, t);
+
+      } catch (Throwable t) {
+        cb.onError(this, t);
+      }
+    } else {
+      this.addTimeout(new Callback.Timeout() {
+        public void go (TimeoutLoop l) {
+          TCPClientLoop loop = (TCPClientLoop) l;
+          loop.createTCPClient(cb, sc);
+        }
+      });
     }
   }
   /**
@@ -273,7 +274,9 @@ public class TCPClientLoop extends TimeoutLoop {
     while (null != (buffer = data.peek())){
       
       try {
-        long num = sc.write(buffer);
+        int pos = buffer.position();
+        int num = sc.write(buffer);
+        r.cb.onWrite(this, sc, buffer, pos, num);
         //p("wrote: "+num);
       } catch (IOException ioe) {
         r.cb.onError(this, sc, ioe);
