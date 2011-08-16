@@ -53,10 +53,8 @@ public class CloseSemanticsTest {
         p("client onWrite: pos="+pos+" num="+num+" total ="+numWritten);
         if (numWritten == NUM2) {
           l.stopLoop();
-          server_loop.stopLoop();
           p("client onWrite: final...");
-          p("l :"+l.stopped);
-          p("s :"+server_loop.stopped);
+          clienteof();
         }
       }
       public void onClose (TCPClientLoop l, SocketChannel c) {
@@ -71,6 +69,54 @@ public class CloseSemanticsTest {
     client_loop.createTCPClient(client, "127.0.0.1", PORT);
   }
 
+  static void clienteof() {
+    final TCPClientLoop client_loop = new TCPClientLoop();
+                        client_loop.start();
+    
+    Callback.TCPClient client = new Callback.TCPClient() {
+      public void onConnect (TCPClientLoop l, SocketChannel sc) {
+        p("client onConnect");
+        assert(l == client_loop);
+        byte [] bytes = new byte[NUM2];
+        bytes[0] = 0x01;
+
+        p("client about to write: "+bytes.length);
+        client_loop.write(sc, this, bytes);
+        l.close(sc, this);
+        // this closes the client, the previous write will complete.
+      }
+      public void onData (TCPClientLoop l, SocketChannel c, ByteBuffer b) {
+        assert(l == client_loop);
+        p("client onData: wtf?");
+      }
+      public void onWrite (TCPClientLoop l, SocketChannel sc, ByteBuffer b, int pos, int num) {
+        assert(l == client_loop);
+        //assert(pos <= numWritten);
+        assert(num <= NUM2);
+        numWritten += num;
+        p("client onWrite: pos="+pos+" num="+num+" total ="+numWritten);
+        if (numWritten == NUM2) {
+          l.stopLoop();
+          server_loop.stopLoop();
+          p("client onWrite: final...");
+        }
+      }
+      public void onClose (TCPClientLoop l, SocketChannel c) {
+        p("client onClose: "+c);
+      }
+      public void onEOF (TCPClientLoop l, SocketChannel c) {
+        p("client onEOF");
+        server_loop.stopLoop();
+        l.stopLoop();
+      }
+      public void onError (TCPClientLoop l, SocketChannel c, Throwable ioe) {
+        p("client Err");
+        ioe.printStackTrace();
+      }
+    };
+
+    client_loop.createTCPClient(client, "127.0.0.1", PORT);
+  }
   static int numWrittenS;
   static void clientShutdown() {
     final TCPClientLoop client_loop = new TCPClientLoop();
@@ -129,6 +175,9 @@ public class CloseSemanticsTest {
     final Callback.TCPClient client = new Callback.TCPClient() {
       public void onData (TCPClientLoop l, SocketChannel c, ByteBuffer b) {
         p ("server data: "+b.remaining());
+        if (0x01 == b.get(0)) {
+          l.shutdownOutput(c, this);
+        }
       }
     };
 

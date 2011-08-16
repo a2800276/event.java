@@ -3,4 +3,5 @@
 * order isThreadLoop
 
 * remove dependancy of Thread from Loop => `extends Thread`
-* shutdown/close semantics
+
+* SocketChannel and Loop in TCPClient instead of in signature
