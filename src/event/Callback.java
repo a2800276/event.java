@@ -86,6 +86,13 @@ public interface Callback {
      */
 	  public  void onClose (TCPClientLoop l, SocketChannel c) {}
 
+    /**
+     * Functionality to be executed when the communication partner closes
+     * the socket. This doesn't necessarily mean we are no longer able to
+     * write to the socket.
+     */
+    public  void onEOF   (TCPClientLoop l, SocketChannel c) {}
+
     public void onError (TCPClientLoop l, SocketChannel c, Throwable t){
       this.onError(l, t);
     };

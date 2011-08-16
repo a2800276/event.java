@@ -20,7 +20,10 @@ public class TCPClientLoop extends TimeoutLoop {
     this.dnsLoop = new DNSLoop();
   }
   
-  private DNSLoop dnsLoop;
+  private DNSLoop dnsLoop;  // quick and dirty hack to keep DNS Queries form blocking in
+                            // out Loop. A second DNSLoop is started to queue lookups 
+                            // sequentially for now. When the lookup is complete, the request 
+                            // gets requeued in this loop.
 
   public void run() {
     this.dnsLoop.start();
@@ -55,20 +58,20 @@ public class TCPClientLoop extends TimeoutLoop {
     if (this.isLoopThread()) {
       try {
         final SocketChannel sc = SocketChannel.open();
-        sc.configureBlocking(false);
+                            sc.configureBlocking(false);
 
         SocketAddress remote = new InetSocketAddress(host, port);
 
         sc.register(this.selector, SelectionKey.OP_CONNECT, new R(sc, cb));
         sc.connect(remote);	
+
       } catch (Throwable t) {
         cb.onError(this, t);
       }
     } else { 
       this.addTimeout(new Callback.Timeout(){
         public void go(TimeoutLoop loop) {
-          TCPClientLoop l = (TCPClientLoop)loop;
-          l.createTCPClient(cb, host, port);
+          TCPClientLoop.this.createTCPClient(cb, host, port);
         }
       });
     }
@@ -105,8 +108,7 @@ public class TCPClientLoop extends TimeoutLoop {
     } else {
       this.addTimeout(new Callback.Timeout() {
         public void go (TimeoutLoop l) {
-          TCPClientLoop loop = (TCPClientLoop) l;
-          loop.createTCPClient(cb, sc);
+          TCPClientLoop.this.createTCPClient(cb, sc);
         }
       });
     }
@@ -122,37 +124,53 @@ public class TCPClientLoop extends TimeoutLoop {
    *  Used to write to a client.
    */
   public void write (final SocketChannel sc, final Callback.TCPClient cb, final ByteBuffer buffer) {
-
-    // check in proper thread.
-    if (!this.isLoopThread()) {
-      this.addTimeout(new Callback.Timeout(){
-        public void go(TimeoutLoop loop) {
-          ((TCPClientLoop)loop).write(sc, cb, buffer);
+    
+    if (this.isLoopThread()) {
+      SelectionKey key = sc.keyFor(this.selector);
+      if (null == key) {
+        cb.onError(this, sc, new RuntimeException("not a previously configured channel!"));
+      } else {
+        //p(sc.socket().getLocalPort()+">write:"+bin(key.interestOps()));  
+        key.interestOps(key.interestOps() | SelectionKey.OP_WRITE); 
+        //p(sc.socket().getLocalPort()+"<write:"+bin(key.interestOps()));  
+        R r = (R)key.attachment();
+        if ( !(r.closePending || r.channel.socket().isOutputShutdown()) ) {
+          r.push(buffer);
+        } else {
+          cb.onError(this, sc, new RuntimeException("channel no longer writable"));
         }
-      });
+      }
       return;
     }
 
-    SelectionKey key = sc.keyFor(this.selector);
-    if (null == key) {
-      cb.onError(this, sc, new RuntimeException("not a previously configured channel!"));
-    } else {
-    //p(sc.socket().getLocalPort()+">write:"+bin(key.interestOps()));  
-      key.interestOps(key.interestOps() | SelectionKey.OP_WRITE); 
-    //p(sc.socket().getLocalPort()+"<write:"+bin(key.interestOps()));  
-      R r_orig = (R)key.attachment();
-      r_orig.push(buffer);
+    this.addTimeout(new Callback.Timeout(){
+      public void go(TimeoutLoop loop) {
+        ((TCPClientLoop)loop).write(sc, cb, buffer);
+      }
+    });
+    return;
+  }
+  
+  public enum Shutdown {
+    SHUT_RD, SHUT_WR, SHUT_RDWR
+  }
+  public void shutdown (final SocketChannel sc, final Callback.TCPClient cb, Shutdown how) {
+    switch (how) {
+      case SHUT_WR:
+        shutdownOutput(sc, cb);
+        break;
+      case SHUT_RD:
+        shutdownInput(sc, cb);
+      default:
+        shutdownOutput(sc, cb);
     }
   }
 
   public void shutdownOutput (final SocketChannel sc, final Callback.TCPClient cb) {
 
     if (this.isLoopThread()) {
-        try {
-          sc.socket().shutdownOutput(); 
-        } catch (IOException ioe) {
-          cb.onError(this, sc, ioe);
-        }
+        try { sc.socket().shutdownOutput(); } 
+        catch (IOException ioe) { cb.onError(this, sc, ioe); }
         return;
     }
     
@@ -163,25 +181,55 @@ public class TCPClientLoop extends TimeoutLoop {
     this.addTimeout(new Callback.Timeout() {
       public void go (TimeoutLoop loop) {
         // TODO cancel all write operations, or check.
-        ((TCPClientLoop)loop).shutdownOutput(sc, cb);
+        shutdownOutput(sc, cb);
       }
     });
   }
 
+  public void shutdownInput (final SocketChannel sc, final Callback.TCPClient cb) {
+
+    if (this.isLoopThread()) {
+        try { sc.socket().shutdownInput(); } 
+        catch (IOException ioe) { cb.onError(this, sc, ioe); }
+        return;
+    }
+    
+    //
+    // else
+    //
+
+    this.addTimeout(new Callback.Timeout() {
+      public void go (TimeoutLoop loop) {
+        // TODO cancel all write operations, or check.
+        shutdownInput(sc, cb);
+      }
+    });
+  }
+
+
   public void close (final SocketChannel sc, final Callback.TCPClient client) {
+    p("here");
+    if (this.isLoopThread()) {
+      R r = r(sc);
+      if (r != null && (sc.socket().isOutputShutdown() || !r.dataPending()) ) {
+        handleClose(sc); 
+      } else {
+        r.closePending = true;
+      }
+      return;
+    }
+
     // can't close channel immediately, because stuff may still need to be written...
     // the socket will remain open until all pending data is written. 
     this.addTimeout(new Callback.Timeout() {
       public void go (TimeoutLoop l) {
-          R r = r(sc);
-          if (r != null && !r.dataPending()) {
-            handleClose(sc); 
-          } else {
-            r.closePending = true;
-          }
+        close(sc, client);
       }
     });
   }
+  /**
+   * Utility to retrieve Attachment from sc.
+   * */
 
   R r (SocketChannel sc) {
     SelectionKey key = sc.keyFor(this.selector);
@@ -190,6 +238,9 @@ public class TCPClientLoop extends TimeoutLoop {
   }
 
   void handleClose (SocketChannel sc) {
+
+    assert this.isLoopThread();
+
     SelectionKey key = sc.keyFor(this.selector);
     assert key != null;
     R r = (R)key.attachment();
@@ -201,11 +252,15 @@ public class TCPClientLoop extends TimeoutLoop {
     }
     if (null != r && sc.socket().isClosed()) {
       r.cb.onClose(this, sc);
-    }
+    } 
+
+    // the null != r conditions are weird. Do they pop up anywhere?
   }
 
   protected void go () {
+
     assert this.isLoopThread();
+
     Iterator<SelectionKey> keys = this.selector.selectedKeys().iterator();
     SelectionKey key;
     while (keys.hasNext()) {
@@ -224,7 +279,10 @@ public class TCPClientLoop extends TimeoutLoop {
 
     super.go();
   }
-
+  
+  // all data read from net goes through this buffer.
+  // todo: perhaps in future allow implementation of custom
+  // strategy for buffer allocation
   private final ByteBuffer buf = ByteBuffer.allocateDirect(65535);
 
   private void handleRead (SelectionKey key) {
@@ -244,11 +302,8 @@ public class TCPClientLoop extends TimeoutLoop {
       return;
     }
     if (-1 == i){
-      cb.onClose(this, sc);
-    //p(sc.socket().getLocalPort()+">handleRead:"+bin(key.interestOps()));  
+      cb.onEOF(this, sc);
       key.interestOps(key.interestOps() & ~SelectionKey.OP_READ);
-    //p(sc.socket().getLocalPort()+"<handleRead :"+bin(key.interestOps()));  
-      //key.cancel();
     } else {	
       buf.flip();
       cb.onData(this, sc, buf);
@@ -262,40 +317,40 @@ public class TCPClientLoop extends TimeoutLoop {
 
     SocketChannel sc = (SocketChannel)key.channel();
     R             r  = (R)key.attachment();
+    
+    if (!r.channel.socket().isOutputShutdown()) {
+      Queue<ByteBuffer> data = r.bufferList;
+      ByteBuffer buffer = null;
+      while (null != (buffer = data.peek())){
 
-    Queue<ByteBuffer> data = r.bufferList;
-    ByteBuffer buffer = null;
-    while (null != (buffer = data.peek())){
-      
-      try {
-        int pos = buffer.position();
-        int num = sc.write(buffer);
-        r.cb.onWrite(this, sc, buffer, pos, num);
-        //p("wrote: "+num);
-      } catch (IOException ioe) {
-        r.cb.onError(this, sc, ioe);
-        //todo: received an error on write, what to do?
-        //  * about unwritten data ...
-        //  * about the channel 
-        return;
+        try {
+          int pos = buffer.position();
+          int num = sc.write(buffer);
+          r.cb.onWrite(this, sc, buffer, pos, num);
+        } catch (IOException ioe) {
+          r.cb.onError(this, sc, ioe);
+          return;
+        }
+        if (buffer.remaining() != 0) {
+          // couldn't write the entire buffer, jump
+          // ship and wait for next time around.
+          break;
+        }
+        data.remove();
       }
-      if (buffer.remaining() != 0) {
-        // couldn't write the entire buffer, jump
-        // ship and wait for next time around.
-        break;
+      // we've written all the data, no longer interested in writing.
+      if (data.isEmpty()) {
+        //p(sc.socket().getLocalPort()+">handleWrite:"+bin(key.interestOps()));  
+        key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
+        //p(sc.socket().getLocalPort()+"<handleWrite:"+bin(key.interestOps()));  
+        if (r.closePending) {
+          handleClose(sc);
+        }
       }
-      data.remove();
+    } else {
+      r.cb.onError(this, sc, new RuntimeException("channel no longer writeable"));
     }
 
-    // we've written all the data, no longer interested in writing.
-    if (data.isEmpty()) {
-    //p(sc.socket().getLocalPort()+">handleWrite:"+bin(key.interestOps()));  
-      key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
-    //p(sc.socket().getLocalPort()+"<handleWrite:"+bin(key.interestOps()));  
-      if (r.closePending) {
-        handleClose(sc);
-      }
-    }
   }
   
   private void handleConnect(SelectionKey key) {
@@ -314,12 +369,10 @@ public class TCPClientLoop extends TimeoutLoop {
     cb.onConnect(this, sc); 
 
 
-    //p(sc.socket().getLocalPort()+">handleConnect:"+bin(key.interestOps()));  
     int io = key.interestOps();
         io |= SelectionKey.OP_READ;
         io &= ~SelectionKey.OP_CONNECT;
     key.interestOps(io);
-    //p(sc.socket().getLocalPort()+"<handleConnect:"+bin(key.interestOps()));  
   }
 
 
