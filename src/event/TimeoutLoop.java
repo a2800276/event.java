@@ -26,7 +26,7 @@ import java.util.Comparator;
  *                  // done here will be executed in about 1 second.
  *                 }
  *               });
- *               l.run();
+ *               l.start();
  *
  *               l.stopLoop();
  * </pre>

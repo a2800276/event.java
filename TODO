@@ -1,3 +1,6 @@
 * why is SocketChannel in R?
 * UDP
 * order isThreadLoop
+
+* remove dependancy of Thread from Loop => `extends Thread`
+* shutdown/close semantics
