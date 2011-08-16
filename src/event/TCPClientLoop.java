@@ -50,18 +50,12 @@ public class TCPClientLoop extends TimeoutLoop {
       }   
     });
   }   
+
   public void createTCPClient (final Callback.TCPClient cb, final InetAddress host, final int port) {
     if (this.isLoopThread()) {
       try {
         final SocketChannel sc = SocketChannel.open();
         sc.configureBlocking(false);
-
-        //
-        // todo async dns
-        //    either:
-        // by calling `getByName` in a seperate thread and injecting
-        // the result, or by using an async library. (http://www.xbill.org/dnsjava/)
-        //
 
         SocketAddress remote = new InetSocketAddress(host, port);
 
@@ -307,7 +301,7 @@ public class TCPClientLoop extends TimeoutLoop {
   private void handleConnect(SelectionKey key) {
 
     assert this.isLoopThread();
-    assert key.isAcceptable();
+    assert key.isConnectable();
 
     SocketChannel        sc = (SocketChannel)key.channel();
     Callback.TCPClient cb = ((R)key.attachment()).cb;
