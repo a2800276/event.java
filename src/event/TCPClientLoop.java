@@ -124,17 +124,24 @@ public class TCPClientLoop extends TimeoutLoop {
    *  Used to write to a client.
    */
   public void write (final SocketChannel sc, final Callback.TCPClient cb, final ByteBuffer buffer) {
+
+    if (   !sc.isConnected()      
+        || !sc.isOpen()           
+        || sc.socket().isClosed()
+        || sc.socket().isOutputShutdown() ) 
+    {
+      cb.onError(this, sc, new RuntimeException("channel not open or shutdown");
+      return;
+    }
     
     if (this.isLoopThread()) {
       SelectionKey key = sc.keyFor(this.selector);
       if (null == key) {
         cb.onError(this, sc, new RuntimeException("not a previously configured channel!"));
       } else {
-        //p(sc.socket().getLocalPort()+">write:"+bin(key.interestOps()));  
         key.interestOps(key.interestOps() | SelectionKey.OP_WRITE); 
-        //p(sc.socket().getLocalPort()+"<write:"+bin(key.interestOps()));  
         R r = (R)key.attachment();
-        if ( !(r.closePending || r.channel.socket().isOutputShutdown()) ) {
+        if ( !(r.closePending || sc.socket().isOutputShutdown()) ) {
           r.push(buffer);
         } else {
           cb.onError(this, sc, new RuntimeException("channel no longer writable"));
@@ -161,12 +168,19 @@ public class TCPClientLoop extends TimeoutLoop {
         break;
       case SHUT_RD:
         shutdownInput(sc, cb);
-      default:
+        break;
+      case SHUT_RDWR:
         shutdownOutput(sc, cb);
+        shutdownInput(sc, cb);
     }
   }
 
   public void shutdownOutput (final SocketChannel sc, final Callback.TCPClient cb) {
+    
+    if (   !sc.isConnected()      
+        || !sc.isOpen()           
+        || sc.socket().isClosed()
+        || sc.socket().isOutputShutdown()) {return;}
 
     if (this.isLoopThread()) {
         try { sc.socket().shutdownOutput(); } 
@@ -187,6 +201,11 @@ public class TCPClientLoop extends TimeoutLoop {
   }
 
   public void shutdownInput (final SocketChannel sc, final Callback.TCPClient cb) {
+    
+    if (   !sc.isConnected()      
+        || !sc.isOpen()           
+        || sc.socket().isClosed()
+        || sc.socket().isInputShutdown()) {return;}
 
     if (this.isLoopThread()) {
         try { sc.socket().shutdownInput(); } 
@@ -208,10 +227,19 @@ public class TCPClientLoop extends TimeoutLoop {
 
 
   public void close (final SocketChannel sc, final Callback.TCPClient client) {
-    p("here");
+    
+    if (   !sc.isConnected()      
+        || !sc.isOpen()           
+        || sc.socket().isClosed()) { return; }
+
     if (this.isLoopThread()) {
       R r = r(sc);
-      if (r != null && (sc.socket().isOutputShutdown() || !r.dataPending()) ) {
+      assert r != null;
+      // try to (more or less) follow close/shutdown conventions:
+      // `close` tries to deliver pending data (be it in app or os buffers)
+      // while `shutdown` doesn't care.
+      //
+      if ( sc.socket().isOutputShutdown() || !r.dataPending() ) {
         handleClose(sc); 
       } else {
         r.closePending = true;
@@ -219,14 +247,13 @@ public class TCPClientLoop extends TimeoutLoop {
       return;
     }
 
-    // can't close channel immediately, because stuff may still need to be written...
-    // the socket will remain open until all pending data is written. 
     this.addTimeout(new Callback.Timeout() {
       public void go (TimeoutLoop l) {
         close(sc, client);
       }
     });
   }
+
   /**
    * Utility to retrieve Attachment from sc.
    * */
@@ -238,27 +265,29 @@ public class TCPClientLoop extends TimeoutLoop {
   }
 
   void handleClose (SocketChannel sc) {
-
+  //  p(">>>> handleClose"+this.getClass());
     assert this.isLoopThread();
 
     SelectionKey key = sc.keyFor(this.selector);
     assert key != null;
     R r = (R)key.attachment();
+    assert r !=  null;
     key.cancel();
+
     try {
       sc.close();
     } catch (IOException ioe) {
       r.cb.onError(TCPClientLoop.this, sc, ioe);
     }
-    if (null != r && sc.socket().isClosed()) {
+    if (sc.socket().isClosed()) {
       r.cb.onClose(this, sc);
     } 
 
-    // the null != r conditions are weird. Do they pop up anywhere?
+  //  p("<<<< handleClose"+this.getClass());
   }
 
   protected void go () {
-
+   // p(">>>> tick"+this.getClass());
     assert this.isLoopThread();
 
     Iterator<SelectionKey> keys = this.selector.selectedKeys().iterator();
@@ -278,6 +307,7 @@ public class TCPClientLoop extends TimeoutLoop {
     }
 
     super.go();
+   // p("<<<< tick "+this.getClass());
   }
   
   // all data read from net goes through this buffer.
@@ -286,11 +316,12 @@ public class TCPClientLoop extends TimeoutLoop {
   private final ByteBuffer buf = ByteBuffer.allocateDirect(65535);
 
   private void handleRead (SelectionKey key) {
+    //p(">>>> handleRead"+this.getClass());
 
     assert this.isLoopThread();
     assert key.isReadable();
     
-    SocketChannel        sc = (SocketChannel)key.channel();
+    SocketChannel      sc = (SocketChannel)key.channel();
     Callback.TCPClient cb = ((R)key.attachment()).cb;
 
     buf.clear();
@@ -302,15 +333,17 @@ public class TCPClientLoop extends TimeoutLoop {
       return;
     }
     if (-1 == i){
-      cb.onEOF(this, sc);
       key.interestOps(key.interestOps() & ~SelectionKey.OP_READ);
+      cb.onEOF(this, sc); // howto: differentiated b/t which direction was closed?
     } else {	
       buf.flip();
       cb.onData(this, sc, buf);
     }
+    //p("<<<< handleRead"+this.getClass());
   }
 
   private void handleWrite(SelectionKey key) {
+    //p(">>>>>> handleWrite"+this.getClass());
 
     assert this.isLoopThread();
     assert key.isWritable();
@@ -318,17 +351,25 @@ public class TCPClientLoop extends TimeoutLoop {
     SocketChannel sc = (SocketChannel)key.channel();
     R             r  = (R)key.attachment();
     
-    if (!r.channel.socket().isOutputShutdown()) {
+
+    if (!sc.isOutputShutdown()) {
       Queue<ByteBuffer> data = r.bufferList;
       ByteBuffer buffer = null;
       while (null != (buffer = data.peek())){
-
         try {
           int pos = buffer.position();
           int num = sc.write(buffer);
           r.cb.onWrite(this, sc, buffer, pos, num);
         } catch (IOException ioe) {
+
+          /*
+           It seems as though there is no way to determine whether the 
+           remote side has closed the channel. At this point though, there's nothing
+           left to do but close the connection.
+          */
+
           r.cb.onError(this, sc, ioe);
+
           return;
         }
         if (buffer.remaining() != 0) {
@@ -340,9 +381,9 @@ public class TCPClientLoop extends TimeoutLoop {
       }
       // we've written all the data, no longer interested in writing.
       if (data.isEmpty()) {
-        //p(sc.socket().getLocalPort()+">handleWrite:"+bin(key.interestOps()));  
         key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
-        //p(sc.socket().getLocalPort()+"<handleWrite:"+bin(key.interestOps()));  
+        // since there's nothing left to write, it's safe to close in
+        // case `close` was called previously.
         if (r.closePending) {
           handleClose(sc);
         }
@@ -351,6 +392,7 @@ public class TCPClientLoop extends TimeoutLoop {
       r.cb.onError(this, sc, new RuntimeException("channel no longer writeable"));
     }
 
+    //p("<<<<<< handleWrite"+this.getClass());
   }
   
   private void handleConnect(SelectionKey key) {
@@ -358,7 +400,7 @@ public class TCPClientLoop extends TimeoutLoop {
     assert this.isLoopThread();
     assert key.isConnectable();
 
-    SocketChannel        sc = (SocketChannel)key.channel();
+    SocketChanne       sc = (SocketChannel)key.channel();
     Callback.TCPClient cb = ((R)key.attachment()).cb;
     try {
       sc.finishConnect();
@@ -423,7 +465,7 @@ public class TCPClientLoop extends TimeoutLoop {
     Queue<ByteBuffer> bufferList;
     boolean closePending;
 
-    R (SocketChannel c,  Callback.TCPClient cb) {
+    R (SocketChannel c, Callback.TCPClient cb) {
       this.channel = c;
       this.cb = cb;
       this.bufferList = new LinkedList<ByteBuffer>();
@@ -435,5 +477,4 @@ public class TCPClientLoop extends TimeoutLoop {
       return this.bufferList.size() != 0;
     }
   }
-
 }

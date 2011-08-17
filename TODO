@@ -1,7 +1,8 @@
 * why is SocketChannel in R?
 * UDP
-* order isThreadLoop
 
-* remove dependancy of Thread from Loop => `extends Thread`
+* what happens onEOF? how to tell if remote only closed one half of connection?
 
-* SocketChannel and Loop in TCPClient instead of in signature
+* remove dependancy of Thread from Loop => `extends Thread` ?
+
+* SocketChannel and Loop in TCPClient instead of in signature ?
