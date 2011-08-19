@@ -41,7 +41,7 @@ public class EchoTest extends Test {
 
     public void onData(TCPClientLoop l,  SocketChannel sc, ByteBuffer buf) {
       int len = buf.remaining();
-      //check(buf);
+      check(buf);
       if (0 >= count) {
         // EchoTest.this.done();
       } else {
