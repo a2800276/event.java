@@ -15,50 +15,10 @@ public class EchoTest extends Test {
 
   public EchoTest() {
     super();
-    setClientServer(new EchoTest.Client(), new EchoTest.Server());
+    setClientServer(new EchoTest.Client(), new Test.EchoServer());
   }
 
-  static ByteBuffer copyBuffer (ByteBuffer orig) {
-    ByteBuffer ret = ByteBuffer.allocate(orig.remaining());
-
-    orig.mark();
-    ret.put(orig);
-    ret.flip();
-    orig.reset();
-
-    return ret;
-  }
   
-  class Server extends Test.Server {
-    public void onAccept(TCPServerLoop l, ServerSocketChannel ssc, SocketChannel sc){
-      l.createTCPClient(new EchoTest.EchoClient(), sc);
-    }
-  }
-  class EchoClient extends Test.Client {
-    Random rnd = new Random(0L);
-    public void onData(TCPClientLoop l, SocketChannel sc, ByteBuffer buf) {
-       int    len = buf.remaining();
-      byte [] arr = new byte[len];
-      byte [] chk = new byte[len];
-     p("s read: "+len); 
-      buf.mark();
-      buf.get(arr);
-      buf.reset();
-      rnd.nextBytes(chk);
-
-      if (!cmp(arr, chk)) {
-        p("server failure!");
-        dump(arr,chk);
-        System.exit(1);
-      }
-
-      l.write(sc, this, copyBuffer(buf));
-    }
-    public void onWrite(TCPClientLoop l, SocketChannel sc, ByteBuffer b, int pos, int num) {
-      p("s echoed: "+num +" from: "+b.hashCode()+" pos="+pos);
-    }
-  
-  }
   class Client extends Test.Client {
     Random back  = new Random(0L); 
     Random forth = new Random(0L); 

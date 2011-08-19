@@ -73,9 +73,20 @@ public class Test {
     }
   }
 
+  static ByteBuffer copyBuffer (ByteBuffer orig) {
+    ByteBuffer ret = ByteBuffer.allocate(orig.remaining());
+
+    orig.mark();
+    ret.put(orig);
+    ret.flip();
+    orig.reset();
+
+    return ret;
+  }
+
   class EchoClient extends Client {
     public void onData(TCPClientLoop l, SocketChannel sc, ByteBuffer buf) {
-      l.write(sc, this, buf.duplicate());
+      l.write(sc, this, copyBuffer(buf));
     }
   }
   
