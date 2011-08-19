@@ -33,6 +33,7 @@ public class TCPClientLoop extends TimeoutLoop {
   public void stopLoop() {
     this.dnsLoop.stopLoop();
     super.stopLoop();
+    handleCloseAllSockets();
   }
 
   
@@ -444,6 +445,21 @@ public class TCPClientLoop extends TimeoutLoop {
         io |= SelectionKey.OP_READ;
         io &= ~SelectionKey.OP_CONNECT;
     key.interestOps(io);
+  }
+  
+  /**
+   * TODO: currently not graceful,
+   * this is the emerency brake.
+   */
+  private void handleCloseAllSockets() {
+    for (SelectionKey key : this.selector.keys()) {
+      try {
+      key.channel().close();
+      key.cancel();
+      } catch (java.io.IOException ioe) {
+        ioe.printStackTrace();
+      }
+    }
   }
 
 
