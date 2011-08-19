@@ -23,27 +23,25 @@ public class EchoTest extends Test {
     Random back  = new Random(0L); 
     Random forth = new Random(0L); 
         
-    final int TOT = 4000000;
-        int count = TOT;
-        int NUM   =  100000;
+    final long TOT   = 40000000;
+          long count = TOT;
+          int NUM   =  100000;
+
     byte [] bytes = new byte[NUM];
       int numRead = 0;
 
     public void onConnect(TCPClientLoop l, java.nio.channels.SocketChannel sc) {
       EchoTest.this.start = System.currentTimeMillis();
+
       back.nextBytes(bytes);
       l.write(sc, this, bytes);
       count -= NUM;
     }
   
 
-    public void onWrite(TCPClientLoop l, SocketChannel sc, ByteBuffer b, int pos, int num) {
-      p("c wrote: "+num);
-    }
     public void onData(TCPClientLoop l,  SocketChannel sc, ByteBuffer buf) {
       int len = buf.remaining();
-      p("c read:"+len); 
-      check(buf);
+      //check(buf);
       if (0 >= count) {
         // EchoTest.this.done();
       } else {
@@ -67,8 +65,7 @@ public class EchoTest extends Test {
       buf.get(arr);
       forth.nextBytes(chk);
      
-      //boolean passed = java.util.Arrays.equals(arr, chk);
-      boolean passed = cmp(arr, chk);
+      boolean passed = java.util.Arrays.equals(arr, chk);
 
       if (!passed) {
         p("-----");     

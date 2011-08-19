@@ -115,6 +115,10 @@ public class TCPClientLoop extends TimeoutLoop {
   }
   /**
    * Utility, avoid if possible! slowish
+   *
+   * The `write` methods don't make copy of the data passed to them, so as soon
+   * data is passed to `write` it must remain untouch because it is place on the 
+   * write queue as is.
    */
   public void write (final SocketChannel sc, final Callback.TCPClient cb, byte [] bytes) {
     write(sc, cb, ByteBuffer.wrap(bytes));
@@ -122,6 +126,10 @@ public class TCPClientLoop extends TimeoutLoop {
 
   /**
    *  Used to write to a client.
+   *
+   *  The `write` methods don't make copy of the data passed to them, so as soon
+   *  data is passed to `write` it must remain untouch because it is place on the 
+   *  write queue as is.
    */
   public void write (final SocketChannel sc, final Callback.TCPClient cb, final ByteBuffer buffer) {
 
@@ -130,7 +138,7 @@ public class TCPClientLoop extends TimeoutLoop {
         || sc.socket().isClosed()
         || sc.socket().isOutputShutdown() ) 
     {
-      cb.onError(this, sc, new RuntimeException("channel not open or shutdown");
+      cb.onError(this, sc, new RuntimeException("channel not open or shutdown"));
       return;
     }
     
@@ -161,6 +169,13 @@ public class TCPClientLoop extends TimeoutLoop {
   public enum Shutdown {
     SHUT_RD, SHUT_WR, SHUT_RDWR
   }
+
+  /**
+   * shutdown the SocketChannel, this tries to follow posix behaviour in that
+   * any data queued to be sent or received will be discarded. This definately applies
+   * for the application level data queues, and _should_ also apply to data stored
+   * in the OS TCP buffers.
+   */
   public void shutdown (final SocketChannel sc, final Callback.TCPClient cb, Shutdown how) {
     switch (how) {
       case SHUT_WR:
@@ -174,7 +189,9 @@ public class TCPClientLoop extends TimeoutLoop {
         shutdownInput(sc, cb);
     }
   }
-
+  /**
+   * @see shutdown
+   */
   public void shutdownOutput (final SocketChannel sc, final Callback.TCPClient cb) {
     
     if (   !sc.isConnected()      
@@ -199,7 +216,10 @@ public class TCPClientLoop extends TimeoutLoop {
       }
     });
   }
-
+  
+  /**
+   * @see shutdown
+   */
   public void shutdownInput (final SocketChannel sc, final Callback.TCPClient cb) {
     
     if (   !sc.isConnected()      
@@ -224,8 +244,12 @@ public class TCPClientLoop extends TimeoutLoop {
       }
     });
   }
-
-
+  
+  /**
+   * closes the SocketChannel gracefully, attempting to send any remaining data queued
+   * in the application queues and OS TCP buffers (probably), but will prevent any
+   * further data to be sent from the channel.
+   */
   public void close (final SocketChannel sc, final Callback.TCPClient client) {
     
     if (   !sc.isConnected()      
@@ -312,8 +336,8 @@ public class TCPClientLoop extends TimeoutLoop {
   
   // all data read from net goes through this buffer.
   // todo: perhaps in future allow implementation of custom
-  // strategy for buffer allocation
-  private final ByteBuffer buf = ByteBuffer.allocateDirect(65535);
+  // strategy for buffer allocation. Also determine ideal buffer size...
+  private final ByteBuffer buf = ByteBuffer.allocateDirect(65536);
 
   private void handleRead (SelectionKey key) {
     //p(">>>> handleRead"+this.getClass());
@@ -352,7 +376,7 @@ public class TCPClientLoop extends TimeoutLoop {
     R             r  = (R)key.attachment();
     
 
-    if (!sc.isOutputShutdown()) {
+    if (!sc.socket().isOutputShutdown()) {
       Queue<ByteBuffer> data = r.bufferList;
       ByteBuffer buffer = null;
       while (null != (buffer = data.peek())){
@@ -363,8 +387,8 @@ public class TCPClientLoop extends TimeoutLoop {
         } catch (IOException ioe) {
 
           /*
-           It seems as though there is no way to determine whether the 
-           remote side has closed the channel. At this point though, there's nothing
+           It seems as though there is no way to determine whether the remote
+           side has closed the channel. At this point though, there's nothing
            left to do but close the connection.
           */
 
@@ -372,21 +396,26 @@ public class TCPClientLoop extends TimeoutLoop {
 
           return;
         }
+
         if (buffer.remaining() != 0) {
-          // couldn't write the entire buffer, jump
-          // ship and wait for next time around.
-          break;
+
+          // couldn't write the entire buffer, bail and wait for next time
+          // around.
+
+          return;
         }
+
         data.remove();
       }
+
       // we've written all the data, no longer interested in writing.
-      if (data.isEmpty()) {
-        key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
-        // since there's nothing left to write, it's safe to close in
-        // case `close` was called previously.
-        if (r.closePending) {
-          handleClose(sc);
-        }
+      key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
+
+      // since there's nothing left to write, it's now safe to close in case
+      // `close` was called previously.
+
+      if (r.closePending) {
+        handleClose(sc);
       }
     } else {
       r.cb.onError(this, sc, new RuntimeException("channel no longer writeable"));
@@ -400,16 +429,16 @@ public class TCPClientLoop extends TimeoutLoop {
     assert this.isLoopThread();
     assert key.isConnectable();
 
-    SocketChanne       sc = (SocketChannel)key.channel();
+    SocketChannel      sc = (SocketChannel)key.channel();
     Callback.TCPClient cb = ((R)key.attachment()).cb;
+
     try {
       sc.finishConnect();
+      cb.onConnect(this, sc); 
     } catch (IOException ioe) {
       cb.onError(this, sc, ioe);
       return;
     }
-    cb.onConnect(this, sc); 
-
 
     int io = key.interestOps();
         io |= SelectionKey.OP_READ;
@@ -423,6 +452,7 @@ public class TCPClientLoop extends TimeoutLoop {
   static String bin(int num) {
     return Integer.toBinaryString(num);
   }
+
   static String to_s (ByteBuffer buf) {
     StringBuilder b = new StringBuilder();
     while (buf.position() != buf.limit()) {
@@ -430,6 +460,7 @@ public class TCPClientLoop extends TimeoutLoop {
     }
     return b.toString();
   }
+
   public static void main (String [] args) {
     
     TCPClientLoop loop = new TCPClientLoop();
