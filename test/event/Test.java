@@ -32,8 +32,8 @@ public class Test {
     p("=============");
   }
 
-  final TCPServerLoop serverL = new TCPServerLoop();
-  final TCPClientLoop clientL = new TCPClientLoop();
+  TCPServerLoop serverL = new TCPServerLoop();
+  TCPClientLoop clientL = new TCPClientLoop();
 
   Callback.TCPClient client;
   Callback.TCPServer server;

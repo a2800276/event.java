@@ -14,10 +14,22 @@ import java.net.SocketAddress;
 
 public class TCPClientLoop extends TimeoutLoop {
   
+  // all data read from net goes through this buffer.
+  // todo: perhaps in future allow implementation of custom
+  // strategy for buffer allocation. Also determine ideal buffer size...
+  private final ByteBuffer recvBuffer;
 
-  public TCPClientLoop () {
+  // default size of the internal recv buffer
+  public static final int DEFAULT_RECV_BUFFER_SIZE = 65536;
+
+  public TCPClientLoop (int recvBufferSz) {
     super();
+
     this.dnsLoop = new DNSLoop();
+    this.recvBuffer = ByteBuffer.allocateDirect(recvBufferSz);
+  }
+  public TCPClientLoop () {
+    this(DEFAULT_RECV_BUFFER_SIZE);
   }
   
   private DNSLoop dnsLoop;  // quick and dirty hack to keep DNS Queries form blocking in
@@ -355,10 +367,6 @@ public class TCPClientLoop extends TimeoutLoop {
    // p("<<<< tick "+this.getClass());
   }
   
-  // all data read from net goes through this buffer.
-  // todo: perhaps in future allow implementation of custom
-  // strategy for buffer allocation. Also determine ideal buffer size...
-  private final ByteBuffer buf = ByteBuffer.allocateDirect(65536);
 
   private void handleRead (SelectionKey key) {
     //p(">>>> handleRead"+this.getClass());
@@ -369,10 +377,10 @@ public class TCPClientLoop extends TimeoutLoop {
     SocketChannel      sc = (SocketChannel)key.channel();
     Callback.TCPClient cb = ((R)key.attachment()).cb;
 
-    buf.clear();
+    this.recvBuffer.clear();
     int i = 0;
     try {
-      i = sc.read(buf);
+      i = sc.read(this.recvBuffer);
     } catch (IOException ioe) {
       cb.onError(this, sc, ioe);
       return;
@@ -381,8 +389,8 @@ public class TCPClientLoop extends TimeoutLoop {
       key.interestOps(key.interestOps() & ~SelectionKey.OP_READ);
       cb.onEOF(this, sc); // howto: differentiated b/t which direction was closed?
     } else {	
-      buf.flip();
-      cb.onData(this, sc, buf);
+      this.recvBuffer.flip();
+      cb.onData(this, sc, this.recvBuffer);
     }
     //p("<<<< handleRead"+this.getClass());
   }

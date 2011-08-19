@@ -10,6 +10,9 @@ public class TCPServerLoop extends TCPClientLoop {
   public TCPServerLoop() {
     super();
   }
+  public TCPServerLoop(int recvBuffersz) {
+    super(recvBuffersz);
+  }
   
   /**
    * IOException
