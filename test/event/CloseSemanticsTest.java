@@ -21,36 +21,40 @@ public class CloseSemanticsTest {
     Callback.TCPClient client = new Callback.TCPClient() {
 
       public void onConnect (TCPClientLoop l, SocketChannel sc) {
-        p("client onConnect");
+
         assert(l == client_loop);
-        byte [] bytes = new byte[NUM2];
-        p("client about to write: "+bytes.length);
-        client_loop.write(sc, this, bytes);
+
+        client_loop.write(sc, this, new byte[NUM2]);
         
         // this closes the client, the previous write will complete.
         l.close(sc, this);
       }
 
       public void onData (TCPClientLoop l, SocketChannel c, ByteBuffer b) {
+
         fail ("client onData should not have been called");
+
       }
 
       public void onWrite (TCPClientLoop l, SocketChannel sc, ByteBuffer b, int pos, int num) {
+
+        assert(l.isLoopThread());
         assert(l == client_loop);
         assert(num <= NUM2);
+
         numWritten += num;
-        p("client onWrite: pos="+pos+" num="+num+" total ="+numWritten);
+
         if (numWritten == NUM2) {
-          l.stopLoop();
-          p("client onWrite: final...");
-          clienteof();
+          pass("'client' wrote: "+numWritten);
         }
       }
       public void onClose (TCPClientLoop l, SocketChannel c) {
-        p("client onClose: "+c);
+        pass ("'client' onClose: "+c);
+        l.stopLoop();
+        clienteof();
       }
       public void onError (TCPClientLoop l, SocketChannel c, Throwable ioe) {
-        p("client Err");
+        fail("client Err");
         ioe.printStackTrace();
       }
     };
@@ -65,35 +69,34 @@ public class CloseSemanticsTest {
     Callback.TCPClient client = new Callback.TCPClient() {
 
       public void onConnect (TCPClientLoop l, SocketChannel sc) {
-        p("clientEOF onConnect");
+
         assert(l == client_loop);
         byte [] bytes = new byte[NUM2];
         bytes[0] = 0x01;
 
-        p("clientEOF about to write: "+bytes.length);
         client_loop.write(sc, this, bytes);
       }
 
       public void onData (TCPClientLoop l, SocketChannel c, ByteBuffer b) {
         assert(l == client_loop);
-        fail("clientEOF received data");
+        fail("'clientEOF' received data");
       }
 
       public void onWrite (TCPClientLoop l, SocketChannel sc, ByteBuffer b, int pos, int num) {
         assert(l == client_loop);
         assert(num <= NUM2);
-        p("clientEOF onWrite: pos="+pos+" num="+num+" total ="+numWritten);
       }
 
       public void onClose (TCPClientLoop l, SocketChannel c) {
-        p("clientEOF onClose: "+c);
+        pass ("'clientEOF' onClose: "+c);
+        l.stopLoop();
+        client_server_closes();
       }
 
-      public void onEOF (TCPClientLoop l, SocketChannel c) {
-        p("clientEOF onEOF");
-        l.stopLoop();
+      public void onEOF (TCPClientLoop l, SocketChannel sc) {
+        pass("'clientEOF' onEOF");
+        l.close(sc, this);
 
-        client_server_closes();
       }
 
       public void onError (TCPClientLoop l, SocketChannel c, Throwable ioe) {
@@ -112,12 +115,11 @@ public class CloseSemanticsTest {
     Callback.TCPClient client = new Callback.TCPClient() {
 
       public void onConnect (TCPClientLoop l, SocketChannel sc) {
-        p("client_s_close onConnect");
         assert(l == client_loop);
         byte [] bytes = new byte[NUM2];
         bytes[0] = 0x02;
 
-        p("client_s_close about to write: "+bytes.length);
+        numWritten = 0;
         client_loop.write(sc, this, bytes);
       }
 
@@ -129,58 +131,67 @@ public class CloseSemanticsTest {
       public void onWrite (TCPClientLoop l, SocketChannel sc, ByteBuffer b, int pos, int num) {
         assert(l == client_loop);
         assert(num <= NUM2);
-        p("client_s_close onWrite: pos="+pos+" num="+num+" total ="+numWritten);
+        numWritten += num;
       }
 
       public void onClose (TCPClientLoop l, SocketChannel c) {
-        p("client_s_close onClose: "+c);
+        pass("'server close' onClose");
         l.stopLoop();
-        server_loop.stopLoop();
+        clientShutdown();
       }
 
       public void onEOF (TCPClientLoop l, SocketChannel sc) {
-        p("client_s_close onEOF >>>>>");
-        l.close(sc, this);
-      p("isClosed : "+sc.socket().isClosed());
-      p("isConnected : "+sc.socket().isConnected());
-      p("isInputShutdown : "+sc.socket().isInputShutdown());
-      p("isOutputShutdown : "+sc.socket().isOutputShutdown());
-      p("sc.isConnected : "+sc.isConnected());
-      p("isOpen : "+sc.isOpen());
-        p("client_s_close onEOF <<<<<");
+        pass("'server close' onEOF");
+      }
 
-        //clientShutdown();
+      int errNo = 0;
+      public void check (String mes) {
+        switch (errNo) {
+          case 0:
+            if ("Connection reset by peer".equals(mes) || "Broken pipe".equals(mes)) {
+              pass("'server close' : "+errNo+" : "+mes);
+            } else {
+              fail ("'server close' : "+errNo+" : "+mes);
+            }
+            break;
+          case 1:
+          case 2:
+            if ("Socket is not connected".equals(mes)){
+              pass("'server close' : "+errNo+" : "+mes);
+            } else {
+              fail ("'server close' : "+errNo+" : "+mes);
+            }
+            break;
+          default:
+            fail ("'server close' : "+errNo+" : "+mes);
+        }
+        errNo++;
       }
 
       public void onError (TCPClientLoop l, SocketChannel sc, Throwable ioe) {
-        p("client_s_close Err >>>>");
-      p("isClosed : "+sc.socket().isClosed());
-      p("isConnected : "+sc.socket().isConnected());
-      p("isInputShutdown : "+sc.socket().isInputShutdown());
-      p("isOutputShutdown : "+sc.socket().isOutputShutdown());
-      p("sc.isConnected : "+sc.isConnected());
-      p("isOpen : "+sc.isOpen());
-        p(ioe.getMessage());
-        ioe.printStackTrace(System.out);
+        // behaviour is weird if the server closes socket unexpectantly
+        // read will fail and not return -1 (Connection reset)
+        // write will fail (broken pipe)
+        //
+        // socket.closed, connected, shutdown won't indicate the proper state.
+
+        check(ioe.getMessage());
+
         l.shutdown(sc, this, TCPClientLoop.Shutdown.SHUT_RDWR);
         l.close(sc, this);
-        p("client_s_close Err <<<<");
       }
     };
 
     client_loop.createTCPClient(client, "127.0.0.1", PORT);
   }
-  static int numWrittenS;
   static void clientShutdown() {
     final TCPClientLoop client_loop = new TCPClientLoop();
                         client_loop.start();
     
     Callback.TCPClient client = new Callback.TCPClient() {
       public void onConnect (TCPClientLoop l, SocketChannel sc) {
-        p("clientS onConnect");
         assert(l == client_loop);
         byte [] bytes = new byte[NUM2];
-        p("clientS about to write: "+bytes.length);
         l.write(sc, this, bytes);
         // this doesn't close the client, but shuts it down after the
         // first bytes are written.
@@ -189,29 +200,33 @@ public class CloseSemanticsTest {
         assert(l == client_loop);
         p("clientS onData: wtf?");
       }
+      boolean subsequent;
       public void onWrite (TCPClientLoop l, SocketChannel sc, ByteBuffer b, int pos, int num) {
         assert(l == client_loop);
-        //assert(pos <= numWritten);
         assert(num <= NUM2);
-        numWrittenS += num;
-        p("clientS onWrite: pos="+pos+" num="+num+" total ="+numWritten);
-        if (numWrittenS == NUM2) {
-          l.stopLoop();
-          p("clientS onWrite: final...");
+        
+        if (subsequent) {
+          fail ("'client shutdown' subsequent bytes suceeded");
         }
+        subsequent = true;
         // client is shutdown, no further writes will suceed
         l.shutdown(sc, this, TCPClientLoop.Shutdown.SHUT_WR);
       }
       public void onClose (TCPClientLoop l, SocketChannel c) {
-        p("clientS onClose: "+c);
-      }
-      public void onError (TCPClientLoop l, SocketChannel sc, Throwable ioe) {
-        p("clientS err");
-        ioe.printStackTrace();
-        l.close(sc, this);
+        pass("'client shutdown' : onClose");
+
         l.stopLoop();
         server_loop.stopLoop();
-        p("clientS loop Stopped");
+      }
+      public void onError (TCPClientLoop l, SocketChannel sc, Throwable ioe) {
+
+        if ("channel no longer writeable".equals(ioe.getMessage()) ) {
+          pass("'client shutdown' : error on write");
+        } else {
+          fail("'client shutdown' : unexpected err :"+ioe.getMessage());
+          ioe.printStackTrace();
+        }
+        l.close(sc, this);
       }
     };
 
@@ -226,7 +241,6 @@ public class CloseSemanticsTest {
     final Callback.TCPClient client = new Callback.TCPClient() {
 
       public void onData (TCPClientLoop l, SocketChannel c, ByteBuffer b) {
-        p ("server data: "+b.remaining());
         if (0x01 == b.get(0)) {
           l.shutdownOutput(c, this);
         }
@@ -240,12 +254,10 @@ public class CloseSemanticsTest {
     Callback.TCPServer server   = new Callback.TCPServer() {
 
       public void onConnect (TCPServerLoop l, ServerSocketChannel ssc) {
-        p("listening");
-        client_server_closes();
+        client();
       }
 
       public void onAccept (final TCPServerLoop l, ServerSocketChannel ssc, final SocketChannel sc) {
-        p("server onAccept");
         l.createTCPClient(client, sc);
       }
 
@@ -259,7 +271,10 @@ public class CloseSemanticsTest {
   public static void main (String [] args) {
       server();
   }
-
+  
+  static final void pass (String mes) {
+    p("passed: "+mes);
+  }
   static final void fail (String mes) {
     throw new RuntimeException(mes);
   }

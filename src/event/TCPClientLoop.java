@@ -31,10 +31,28 @@ public class TCPClientLoop extends TimeoutLoop {
   }
   
   public void stopLoop() {
-    this.dnsLoop.stopLoop();
-    super.stopLoop();
-    handleCloseAllSockets();
+    if (this.isLoopThread()) {
+      // this is opposite to the normal semantics:
+      // if we are called from within the loop thread
+      // chances are we are iterating over the selected  
+      // keys in  the main loop. `handleCloseAllSockets`
+      // will iterate over all keys and this causes problems
+      // in the backing collection of the selector
+      this.addTimeout(new Callback.Timeout() {
+        public void go(TimeoutLoop l) {
+          TCPClientLoop.this._stopLoop();
+        }
+      });
+      return;
+    }
+    _stopLoop();
   }
+  private void _stopLoop() {
+    TCPClientLoop.this.dnsLoop.stopLoop();
+    handleCloseAllSockets();
+    TCPClientLoop.super.stopLoop();
+  }
+
 
   
   /**
