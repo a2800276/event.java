@@ -107,7 +107,12 @@ public abstract class Loop extends Thread {
     // this does not need to be synchronized, 
     // it will definately stop the loop eventually...
     this.stopped = true;
-    this.wake();
+    //this.wake();
+    try {
+      this.selector.close();
+    }catch (Throwable t) {
+      t.printStackTrace();
+    }
   }
   
   /**
