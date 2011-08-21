@@ -263,7 +263,7 @@ public class TCPClientLoop extends TimeoutLoop {
       // try to (more or less) follow close/shutdown conventions:
       // `close` tries to deliver pending data (be it in app or os buffers)
       // while `shutdown` doesn't care.
-      //
+
       if ( sc.socket().isOutputShutdown() || !r.dataPending() ) {
         handleClose(sc); 
       } else {
@@ -456,8 +456,8 @@ public class TCPClientLoop extends TimeoutLoop {
   private void handleCloseAllSockets() {
     for (SelectionKey key : this.selector.keys()) {
       try {
-      key.channel().close();
-      key.cancel();
+        key.channel().close();
+        key.cancel();
       } catch (java.io.IOException ioe) {
         ioe.printStackTrace();
       }
