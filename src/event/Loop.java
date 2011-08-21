@@ -41,13 +41,21 @@ public abstract class Loop extends Thread {
     this.setErrCB(cb);
   }
 
+ 
+  public boolean isRunning() {
+    return !this.stopped;
+  }
+
   public void run () {
     this.loopThread = Thread.currentThread();
     int numSelected = 0;
-    while (!stopped) {
+    while (!this.stopped) {
       try {
         // p("sel:"+this.maxSleep);
         numSelected = this.selector.select(this.maxSleep);
+        if (this.stopped) {
+          break;
+        }
         this.maxSleep = 0; // reset maxSleep
         go();
       } catch (Throwable t) {
