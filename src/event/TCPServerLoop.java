@@ -41,6 +41,9 @@ public class TCPServerLoop extends TCPClientLoop {
 
   protected void go () {
     assert this.isLoopThread();
+    if (!this.isRunning()) {
+      return;
+    }
     Iterator<SelectionKey> keys = this.selector.selectedKeys().iterator();
     SelectionKey key;
     while (keys.hasNext()) {

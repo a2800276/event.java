@@ -314,7 +314,9 @@ public class TCPClientLoop extends TimeoutLoop {
   protected void go () {
    // p(">>>> tick"+this.getClass());
     assert this.isLoopThread();
-
+    if (!this.isRunning()) {
+      return;
+    }
     Iterator<SelectionKey> keys = this.selector.selectedKeys().iterator();
     SelectionKey key;
     while (keys.hasNext()) {
