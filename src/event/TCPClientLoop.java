@@ -422,7 +422,6 @@ public class TCPClientLoop extends TimeoutLoop {
 
           // couldn't write the entire buffer, bail and wait for next time
           // around.
-
           return;
         }
 
@@ -512,7 +511,7 @@ public class TCPClientLoop extends TimeoutLoop {
 
         //l.shutdownOutput(ch, this);
         byte [] bs = "GET / HTTP/1.1\r\n\r\n".getBytes();
-        //l.write(ch, this, ByteBuffer.wrap(bs));
+        l.write(sc, this, ByteBuffer.wrap(bs));
         l.close(sc, this);
         l.stopLoop();
       }

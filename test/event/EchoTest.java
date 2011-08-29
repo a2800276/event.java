@@ -8,6 +8,8 @@ import java.nio.ByteBuffer;
 import static event.Test.p;
 import static event.Test.dump;
 
+import event.util.ByteArrayPool;
+import event.util.BufferPool;
 
 public class EchoTest extends Test {
 
@@ -15,36 +17,89 @@ public class EchoTest extends Test {
 
   public EchoTest() {
     super();
-    setClientServer(new EchoTest.Client(), new Test.EchoServer());
+    setClientServer(new EchoTest.Client(), new EchoTest.Server());
   }
-
+  static BufferPool bPool = new BufferPool();
+  static ByteBuffer copyBuffer (ByteBuffer orig) {
+    //ByteBuffer ret = ByteBuffer.allocate(orig.remaining());
+    ByteBuffer ret = bPool.get(orig.remaining()); 
+    orig.mark();
+    ret.put(orig);
+    ret.flip();
+    orig.reset();
+    return ret;
+  }
   
+  class Server extends Test.Server {
+    public void onAccept(TCPServerLoop l, ServerSocketChannel ssc, SocketChannel sc){
+      l.createTCPClient(new EchoTest.EchoClient(), sc);
+    }
+  }
+  class EchoClient extends Test.Client {
+    Random rnd = new Random(0L);
+    public void onData(TCPClientLoop l, SocketChannel sc, ByteBuffer buf) {
+    	assert l.isLoopThread();
+      /*
+       int    len = buf.remaining();
+      byte [] arr = new byte[len];
+      byte [] chk = new byte[len];
+     p("s read: "+len); 
+      buf.mark();
+      buf.get(arr);
+      buf.reset();
+      rnd.nextBytes(chk);
+
+      if (!cmp(arr, chk)) {
+        p("server failure!");
+//        dump(arr,chk);
+        System.exit(1);
+      }
+      */
+      ByteBuffer b2 = copyBuffer(buf);
+      l.write(sc, this, b2);
+    }
+    public void onWrite(TCPClientLoop l, SocketChannel sc, ByteBuffer b, int pos, int num) {
+      if (0 == b.remaining()){
+        bPool.putBack(b);
+      }
+    }
+  
+  }
   class Client extends Test.Client {
     Random back  = new Random(0L); 
     Random forth = new Random(0L); 
-        
-    final long TOT   = 40000000;
-          long count = TOT;
-          int NUM   =  100000;
+    
 
-    byte [] bytes = new byte[NUM];
+    final long TOT = 400000000;
+          long count = TOT;
+           int NUM   =  200000;
+    byte [] bytes;
       int numRead = 0;
+
+    ByteArrayPool pool = new ByteArrayPool(NUM);
 
     public void onConnect(TCPClientLoop l, java.nio.channels.SocketChannel sc) {
       EchoTest.this.start = System.currentTimeMillis();
-
+      bytes = pool.get();
       back.nextBytes(bytes);
       l.write(sc, this, bytes);
       count -= NUM;
     }
   
 
+    public void onWrite(TCPClientLoop l, SocketChannel sc, ByteBuffer b, int pos, int num) {
+      if (pos == NUM-1) {
+        this.pool.putBack(b.array());
+      }
+    }
     public void onData(TCPClientLoop l,  SocketChannel sc, ByteBuffer buf) {
       int len = buf.remaining();
+      p("c read:"+len); 
       check(buf);
       if (0 >= count) {
         // EchoTest.this.done();
       } else {
+        bytes = this.pool.get();
         back.nextBytes(bytes);
         l.write(sc, this, bytes);
         count -= NUM;
@@ -59,19 +114,27 @@ public class EchoTest extends Test {
     
     void check(ByteBuffer buf) {
        int    len = buf.remaining();
-      byte [] arr = new byte[len];
-      byte [] chk = new byte[len];
+      //byte [] arr = new byte[len];
 
-      buf.get(arr);
-      forth.nextBytes(chk);
-     
-      boolean passed = java.util.Arrays.equals(arr, chk);
-
-      if (!passed) {
-        p("-----");     
-        dump(arr, chk);
-        fail ("arrays not equal!");
+      //buf.get(arr);
+//      forth.nextBytes(chk);
+      
+      for (int i = 0; i!= len ; ++i) {
+        //if (arr[i] != (byte)forth.nextInt()) {
+        if (buf.get() != (byte)forth.nextInt()) {
+          fail("arrays not equal: "+i);
+        }      
       }
+        
+
+//      //boolean passed = java.util.Arrays.equals(arr, chk);
+//      boolean passed = cmp(arr, chk);
+//
+//      if (!passed) {
+//        p("-----");     
+//        dump(arr, chk);
+//        fail ("arrays not equal!");
+//      }
 
     }
   }
