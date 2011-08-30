@@ -40,7 +40,9 @@ public class Test {
 
   final    int port = 54321;
   final String host = "127.0.0.1";
-  
+
+  boolean done;
+
   public Test (){}
   public Test (Test.Client client, Test.Server server) {
     this.client = client;
@@ -64,8 +66,11 @@ public class Test {
     done();
   }
   public void done () {
-    serverL.stopLoop();
-    clientL.stopLoop();
+    if (!this.done) {
+      serverL.stopLoop();
+      clientL.stopLoop();
+      this.done = true;
+    } 
   }
 
   class Client extends Callback.TCPClient {
